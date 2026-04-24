@@ -7,10 +7,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           java-version: '17'
@@ -22,10 +20,12 @@ jobs:
           unzip -q /tmp/gradle.zip -d /opt/gradle
           echo "/opt/gradle/gradle-8.4/bin" >> $GITHUB_PATH
 
-      - name: Create all project files
+      - name: Generate all source files
         run: |
 
-          # ── gradle.properties ──────────────────────────────────────────
+          # ════════════════════════════════════════════════════
+          # gradle.properties
+          # ════════════════════════════════════════════════════
           cat > gradle.properties << 'EOF'
           android.useAndroidX=true
           android.enableJetifier=true
@@ -34,7 +34,9 @@ jobs:
           kotlin.code.style=official
           EOF
 
-          # ── settings.gradle ────────────────────────────────────────────
+          # ════════════════════════════════════════════════════
+          # settings.gradle
+          # ════════════════════════════════════════════════════
           cat > settings.gradle << 'EOF'
           pluginManagement {
               repositories {
@@ -54,7 +56,9 @@ jobs:
           include ':app'
           EOF
 
-          # ── build.gradle (root) ────────────────────────────────────────
+          # ════════════════════════════════════════════════════
+          # build.gradle root
+          # ════════════════════════════════════════════════════
           cat > build.gradle << 'EOF'
           plugins {
               id 'com.android.application' version '8.2.2' apply false
@@ -62,7 +66,9 @@ jobs:
           }
           EOF
 
-          # ── app/build.gradle ───────────────────────────────────────────
+          # ════════════════════════════════════════════════════
+          # app/build.gradle
+          # ════════════════════════════════════════════════════
           cat > app/build.gradle << 'EOF'
           plugins {
               id 'com.android.application'
@@ -95,16 +101,19 @@ jobs:
           }
           EOF
 
-          # ── AndroidManifest.xml ────────────────────────────────────────
+          # ════════════════════════════════════════════════════
+          # AndroidManifest.xml
+          # ════════════════════════════════════════════════════
           mkdir -p app/src/main
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET"/>
+              <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
               <application
                   android:allowBackup="true"
                   android:label="WebInspector"
-                  android:theme="@style/Theme.WebInspector"
+                  android:theme="@style/Theme.App"
                   android:usesCleartextTraffic="true"
                   android:hardwareAccelerated="true">
                   <activity
@@ -121,16 +130,16 @@ jobs:
           </manifest>
           EOF
 
-          # ── themes.xml ─────────────────────────────────────────────────
+          # ════════════════════════════════════════════════════
+          # themes.xml
+          # ════════════════════════════════════════════════════
           mkdir -p app/src/main/res/values
           cat > app/src/main/res/values/themes.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
-              <style name="Theme.WebInspector" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+              <style name="Theme.App" parent="Theme.MaterialComponents.DayNight.NoActionBar">
                   <item name="colorPrimary">#6C63FF</item>
-                  <item name="colorPrimaryVariant">#4A42CC</item>
-                  <item name="colorOnPrimary">#FFFFFF</item>
-                  <item name="android:windowBackground">#0A0A0F</item>
+                  <item name="android:windowBackground">#000000</item>
                   <item name="android:statusBarColor">#00000000</item>
                   <item name="android:navigationBarColor">#00000000</item>
                   <item name="android:windowLightStatusBar">false</item>
@@ -138,7 +147,9 @@ jobs:
           </resources>
           EOF
 
-          # ── MainActivity.kt ────────────────────────────────────────────
+          # ════════════════════════════════════════════════════
+          # MainActivity.kt
+          # ════════════════════════════════════════════════════
           mkdir -p app/src/main/java/com/webinspector/app
           cat > app/src/main/java/com/webinspector/app/MainActivity.kt << 'KOTLIN'
           package com.webinspector.app
@@ -146,6 +157,7 @@ jobs:
           import android.annotation.SuppressLint
           import android.app.Dialog
           import android.content.Context
+          import android.content.SharedPreferences
           import android.graphics.*
           import android.graphics.drawable.*
           import android.os.*
@@ -170,44 +182,130 @@ jobs:
               private lateinit var webView: WebView
               private lateinit var root: FrameLayout
               private lateinit var urlBar: EditText
+              private lateinit var topBarContainer: View
+              private lateinit var bottomBarContainer: View
               private lateinit var inspectorBanner: LinearLayout
               private lateinit var inspectedPanel: LinearLayout
+              private lateinit var prefs: SharedPreferences
               private var inspectorMode = false
               private var currentUrl = ""
               private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
+              // ── Prefs keys ─────────────────────────────────────────────
+              companion object {
+                  const val PREF_SHOW_UI    = "show_ui"
+                  const val PREF_ENGINE     = "search_engine"
+                  const val ENGINE_GOOGLE   = "google"
+                  const val ENGINE_YANDEX   = "yandex"
+                  const val ENGINE_BING     = "bing"
+                  const val ENGINE_DUCKDUCK = "duckduckgo"
+                  const val ENGINE_BRAVE    = "brave"
+              }
+
+              // ── dp helper ──────────────────────────────────────────────
               private fun dp(v: Float) = TypedValue.applyDimension(
                   TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics
               ).toInt()
 
-              private val bg          = Color.parseColor("#0A0A0F")
-              private val glass       = Color.parseColor("#1C1C2E")
-              private val glassBorder = Color.parseColor("#2C2C3E")
-              private val accent      = Color.parseColor("#6C63FF")
-              private val accentDark  = Color.parseColor("#4A42CC")
-              private val accentGlow  = Color.parseColor("#3D3A80")
-              private val success     = Color.parseColor("#30D158")
-              private val textColor   = Color.WHITE
-              private val textSub     = Color.parseColor("#8E8EA0")
-              private val white10     = Color.parseColor("#1AFFFFFF")
-              private val white20     = Color.parseColor("#33FFFFFF")
+              // ── iOS 26 Dark Palette ────────────────────────────────────
+              //  Liquid Glass: layered translucent fills + inner glow
+              private val C_BG        = Color.parseColor("#000000")
+              private val C_GLASS1    = Color.parseColor("#0DFFFFFF")   // 5%
+              private val C_GLASS2    = Color.parseColor("#1AFFFFFF")   // 10%
+              private val C_GLASS3    = Color.parseColor("#0A1A1A2E")   // dark tint
+              private val C_BORDER    = Color.parseColor("#33FFFFFF")   // 20%
+              private val C_ACCENT    = Color.parseColor("#6C63FF")
+              private val C_ACCENT2   = Color.parseColor("#9D50FF")
+              private val C_DANGER    = Color.parseColor("#FF453A")
+              private val C_SUCCESS   = Color.parseColor("#32D74B")
+              private val C_TEXT      = Color.WHITE
+              private val C_TEXT2     = Color.parseColor("#EBEBF5CC")   // ~80% white
+              private val C_TEXT3     = Color.parseColor("#EBEBF560")   // ~38% white
+              private val C_RIPPLE    = Color.parseColor("#40FFFFFF")
 
-              // ── Drawables ──────────────────────────────────────────────
-
-              private fun glassDrawable(radiusDp: Float = 24f): Drawable {
+              // ── Liquid Glass Drawable ──────────────────────────────────
+              // Simulates iOS 26 "liquid glass" — multi-layer translucent
+              private fun liquidGlass(
+                  radiusDp: Float = 22f,
+                  tinted: Boolean = false,
+                  bordered: Boolean = true
+              ): Drawable {
                   val r = dp(radiusDp).toFloat()
                   return object : Drawable() {
-                      val p = Paint(Paint.ANTI_ALIAS_FLAG)
-                      val sp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                          style = Paint.Style.STROKE
-                          strokeWidth = dp(1f).toFloat()
-                          color = glassBorder
-                      }
+                      private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+
                       override fun draw(c: Canvas) {
-                          val rect = RectF(bounds)
-                          p.color = Color.parseColor("#14FFFFFF"); c.drawRoundRect(rect, r, r, p)
-                          p.color = glass;                         c.drawRoundRect(rect, r, r, p)
-                          c.drawRoundRect(rect, r, r, sp)
+                          val rc = RectF(bounds)
+
+                          // Layer 1 — base dark glass
+                          p.color = Color.parseColor("#CC08080F")
+                          c.drawRoundRect(rc, r, r, p)
+
+                          // Layer 2 — white shimmer fill
+                          p.color = if (tinted) Color.parseColor("#1A6C63FF") else C_GLASS1
+                          c.drawRoundRect(rc, r, r, p)
+
+                          // Layer 3 — inner light at top (specular highlight)
+                          val topRect = RectF(rc.left + dp(1f), rc.top + dp(1f),
+                              rc.right - dp(1f), rc.top + rc.height() * 0.45f)
+                          val grad = LinearGradient(
+                              0f, topRect.top, 0f, topRect.bottom,
+                              intArrayOf(Color.parseColor("#30FFFFFF"), Color.TRANSPARENT),
+                              null, Shader.TileMode.CLAMP
+                          )
+                          p.shader = grad
+                          c.drawRoundRect(topRect, r, r, p)
+                          p.shader = null
+
+                          // Layer 4 — border
+                          if (bordered) {
+                              p.color = C_BORDER
+                              p.style = Paint.Style.STROKE
+                              p.strokeWidth = dp(0.7f).toFloat()
+                              c.drawRoundRect(rc, r, r, p)
+                              p.style = Paint.Style.FILL
+                          }
+
+                          // Layer 5 — inner shadow bottom
+                          val botRect = RectF(rc.left + dp(1f),
+                              rc.bottom - rc.height() * 0.25f,
+                              rc.right - dp(1f), rc.bottom - dp(1f))
+                          val grad2 = LinearGradient(
+                              0f, botRect.top, 0f, botRect.bottom,
+                              intArrayOf(Color.TRANSPARENT, Color.parseColor("#20000000")),
+                              null, Shader.TileMode.CLAMP
+                          )
+                          p.shader = grad2
+                          c.drawRoundRect(botRect, r, r, p)
+                          p.shader = null
+                      }
+
+                      override fun setAlpha(a: Int) {}
+                      override fun setColorFilter(cf: ColorFilter?) {}
+                      @Suppress("OVERRIDE_DEPRECATION")
+                      override fun getOpacity() = PixelFormat.TRANSLUCENT
+                  }
+              }
+
+              private fun accentGlass(radiusDp: Float = 16f): Drawable {
+                  val r = dp(radiusDp).toFloat()
+                  return object : Drawable() {
+                      private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+                      override fun draw(c: Canvas) {
+                          val rc = RectF(bounds)
+                          // Gradient fill
+                          p.shader = LinearGradient(
+                              rc.left, rc.top, rc.right, rc.bottom,
+                              intArrayOf(C_ACCENT, C_ACCENT2),
+                              null, Shader.TileMode.CLAMP
+                          )
+                          c.drawRoundRect(rc, r, r, p)
+                          p.shader = null
+                          // Specular
+                          p.color = Color.parseColor("#30FFFFFF")
+                          val top = RectF(rc.left+dp(1f), rc.top+dp(1f),
+                              rc.right-dp(1f), rc.top+rc.height()*0.4f)
+                          c.drawRoundRect(top, r, r, p)
                       }
                       override fun setAlpha(a: Int) {}
                       override fun setColorFilter(cf: ColorFilter?) {}
@@ -216,100 +314,217 @@ jobs:
                   }
               }
 
-              private fun accentDrawable(r: Float = 16f) = GradientDrawable(
-                  GradientDrawable.Orientation.TL_BR, intArrayOf(accent, accentDark)
-              ).apply { cornerRadius = dp(r).toFloat() }
-
               private fun ripple(base: Drawable) = RippleDrawable(
-                  android.content.res.ColorStateList.valueOf(white20), base, null
+                  android.content.res.ColorStateList.valueOf(C_RIPPLE), base, null
               )
 
-              // ── SVG Icons via Canvas ────────────────────────────────────
+              // ── Custom SVG Icons ───────────────────────────────────────
+              enum class Ic {
+                  BACK, FORWARD, REFRESH, INSPECT, CODE, FOLDER,
+                  DOWNLOAD, CLOSE, SEARCH, SETTINGS, CHECK, BROWSER,
+                  SHIELD, GLOBE, STAR, MENU
+              }
 
-              enum class Icon { BACK, FORWARD, REFRESH, INSPECT, CODE, FOLDER, DOWNLOAD, CLOSE, SEARCH }
-
-              private fun icon(type: Icon, sizeDp: Int = 22, color: Int = textColor): Bitmap {
+              private fun icon(type: Ic, sizeDp: Int = 22, color: Int = C_TEXT): Bitmap {
                   val s = dp(sizeDp.toFloat())
                   val bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
                   val cv = Canvas(bmp)
-                  val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                  val sw = s * 0.085f
+                  val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                       this.color = color; style = Paint.Style.STROKE
                       strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
-                      strokeWidth = s * 0.08f
+                      strokeWidth = sw
+                  }
+                  val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                      this.color = color; style = Paint.Style.FILL
                   }
                   val f = s / 24f
-                  fun x(v: Float) = v * f
-                  fun y(v: Float) = v * f
+                  fun fx(v: Float) = v * f
+                  fun fy(v: Float) = v * f
+
                   when (type) {
-                      Icon.BACK    -> cv.drawPath(Path().apply { moveTo(x(15f),y(5f)); lineTo(x(8f),y(12f)); lineTo(x(15f),y(19f)) }, p)
-                      Icon.FORWARD -> cv.drawPath(Path().apply { moveTo(x(9f),y(5f)); lineTo(x(16f),y(12f)); lineTo(x(9f),y(19f)) }, p)
-                      Icon.REFRESH -> {
-                          cv.drawArc(RectF(x(3f),y(3f),x(19f),y(19f)), -90f, 270f, false, p)
-                          cv.drawLine(x(12f),y(2f),x(12f),y(5f),p)
+                      Ic.BACK -> cv.drawPath(Path().apply {
+                          moveTo(fx(15f),fy(5f)); lineTo(fx(7f),fy(12f)); lineTo(fx(15f),fy(19f))
+                      }, stroke)
+                      Ic.FORWARD -> cv.drawPath(Path().apply {
+                          moveTo(fx(9f),fy(5f)); lineTo(fx(17f),fy(12f)); lineTo(fx(9f),fy(19f))
+                      }, stroke)
+                      Ic.REFRESH -> {
+                          val oval = RectF(fx(3.5f),fy(3.5f),fx(20.5f),fy(20.5f))
+                          cv.drawArc(oval, -80f, 280f, false, stroke)
+                          // Arrow head
+                          cv.drawPath(Path().apply {
+                              moveTo(fx(12f),fy(2f)); lineTo(fx(15.5f),fy(5.5f)); lineTo(fx(8.5f),fy(5.5f)); close()
+                          }, fill)
                       }
-                      Icon.INSPECT -> {
-                          cv.drawCircle(x(12f),y(12f),x(6f),p)
-                          cv.drawLine(x(12f),y(2f),x(12f),y(7f),p)
-                          cv.drawLine(x(12f),y(17f),x(12f),y(22f),p)
-                          cv.drawLine(x(2f),y(12f),x(7f),y(12f),p)
-                          cv.drawLine(x(17f),y(12f),x(22f),y(12f),p)
-                          val fp = Paint(p).apply { style = Paint.Style.FILL }
-                          cv.drawCircle(x(12f),y(12f),x(2f),fp)
+                      Ic.INSPECT -> {
+                          cv.drawCircle(fx(12f),fy(12f),fx(5.5f),stroke)
+                          cv.drawLine(fx(12f),fy(1.5f),fx(12f),fy(6.5f),stroke)
+                          cv.drawLine(fx(12f),fy(17.5f),fx(12f),fy(22.5f),stroke)
+                          cv.drawLine(fx(1.5f),fy(12f),fx(6.5f),fy(12f),stroke)
+                          cv.drawLine(fx(17.5f),fy(12f),fx(22.5f),fy(12f),stroke)
+                          cv.drawCircle(fx(12f),fy(12f),fx(1.8f),fill)
                       }
-                      Icon.CODE    -> cv.drawPath(Path().apply {
-                          moveTo(x(8f),y(6f)); lineTo(x(2f),y(12f)); lineTo(x(8f),y(18f))
-                          moveTo(x(16f),y(6f)); lineTo(x(22f),y(12f)); lineTo(x(16f),y(18f))
-                      }, p)
-                      Icon.FOLDER  -> cv.drawPath(Path().apply {
-                          moveTo(x(2f),y(7f)); lineTo(x(2f),y(19f)); lineTo(x(22f),y(19f))
-                          lineTo(x(22f),y(9f)); lineTo(x(11f),y(9f)); lineTo(x(9f),y(7f)); close()
-                      }, p)
-                      Icon.DOWNLOAD -> {
-                          cv.drawLine(x(12f),y(3f),x(12f),y(15f),p)
-                          cv.drawPath(Path().apply { moveTo(x(7f),y(10f)); lineTo(x(12f),y(15f)); lineTo(x(17f),y(10f)) }, p)
-                          cv.drawLine(x(3f),y(19f),x(21f),y(19f),p)
+                      Ic.CODE -> cv.drawPath(Path().apply {
+                          moveTo(fx(8f),fy(6f)); lineTo(fx(2f),fy(12f)); lineTo(fx(8f),fy(18f))
+                          moveTo(fx(16f),fy(6f)); lineTo(fx(22f),fy(12f)); lineTo(fx(16f),fy(18f))
+                          moveTo(fx(14f),fy(4f)); lineTo(fx(10f),fy(20f))
+                      }, stroke)
+                      Ic.FOLDER -> {
+                          cv.drawPath(Path().apply {
+                              moveTo(fx(2f),fy(8f)); lineTo(fx(2f),fy(19f))
+                              lineTo(fx(22f),fy(19f)); lineTo(fx(22f),fy(9f))
+                              lineTo(fx(12f),fy(9f)); lineTo(fx(10f),fy(7f))
+                              lineTo(fx(4f),fy(7f)); close()
+                          }, stroke)
+                          cv.drawLine(fx(2f),fy(9f),fx(22f),fy(9f),stroke)
                       }
-                      Icon.CLOSE  -> { cv.drawLine(x(5f),y(5f),x(19f),y(19f),p); cv.drawLine(x(19f),y(5f),x(5f),y(19f),p) }
-                      Icon.SEARCH -> { cv.drawCircle(x(10f),y(10f),x(6f),p); cv.drawLine(x(15f),y(15f),x(21f),y(21f),p) }
+                      Ic.DOWNLOAD -> {
+                          cv.drawLine(fx(12f),fy(3f),fx(12f),fy(15f),stroke)
+                          cv.drawPath(Path().apply {
+                              moveTo(fx(6f),fy(10f)); lineTo(fx(12f),fy(16f)); lineTo(fx(18f),fy(10f))
+                          }, stroke)
+                          stroke.strokeWidth = sw * 1.2f
+                          cv.drawLine(fx(3f),fy(20f),fx(21f),fy(20f),stroke)
+                          stroke.strokeWidth = sw
+                      }
+                      Ic.CLOSE -> {
+                          cv.drawLine(fx(5f),fy(5f),fx(19f),fy(19f),stroke)
+                          cv.drawLine(fx(19f),fy(5f),fx(5f),fy(19f),stroke)
+                      }
+                      Ic.SEARCH -> {
+                          cv.drawCircle(fx(10.5f),fy(10.5f),fx(6f),stroke)
+                          cv.drawLine(fx(15f),fy(15f),fx(21f),fy(21f),stroke)
+                      }
+                      Ic.SETTINGS -> {
+                          cv.drawCircle(fx(12f),fy(12f),fx(3f),stroke)
+                          val r = fx(9.5f)
+                          for (i in 0 until 8) {
+                              val angle = Math.toRadians(i * 45.0)
+                              val cos = Math.cos(angle).toFloat()
+                              val sin = Math.sin(angle).toFloat()
+                              cv.drawLine(
+                                  fx(12f)+cos*r*0.65f, fy(12f)+sin*r*0.65f,
+                                  fx(12f)+cos*r, fy(12f)+sin*r, stroke
+                              )
+                          }
+                      }
+                      Ic.CHECK -> cv.drawPath(Path().apply {
+                          moveTo(fx(4f),fy(12f)); lineTo(fx(9f),fy(17f)); lineTo(fx(20f),fy(6f))
+                      }, stroke)
+                      Ic.BROWSER -> {
+                          val rc = RectF(fx(2f),fy(3f),fx(22f),fy(21f))
+                          cv.drawRoundRect(rc, fx(3f), fx(3f), stroke)
+                          cv.drawLine(fx(2f),fy(8f),fx(22f),fy(8f),stroke)
+                          cv.drawCircle(fx(5.5f),fy(5.5f),fx(1.2f),fill)
+                          cv.drawCircle(fx(9f),fy(5.5f),fx(1.2f),fill)
+                      }
+                      Ic.SHIELD -> {
+                          cv.drawPath(Path().apply {
+                              moveTo(fx(12f),fy(2f)); lineTo(fx(20f),fy(6f))
+                              lineTo(fx(20f),fy(13f)); lineTo(fx(12f),fy(22f))
+                              lineTo(fx(4f),fy(13f)); lineTo(fx(4f),fy(6f)); close()
+                          }, stroke)
+                      }
+                      Ic.GLOBE -> {
+                          cv.drawCircle(fx(12f),fy(12f),fx(9f),stroke)
+                          cv.drawPath(Path().apply {
+                              moveTo(fx(12f),fy(3f)); lineTo(fx(12f),fy(21f))
+                          }, stroke)
+                          cv.drawArc(RectF(fx(5f),fy(6f),fx(19f),fy(18f)), 0f, 180f, false, stroke)
+                          cv.drawLine(fx(3f),fy(12f),fx(21f),fy(12f),stroke)
+                      }
+                      Ic.STAR -> cv.drawPath(Path().apply {
+                          val cx=fx(12f); val cy=fy(12f)
+                          val or=fx(9f); val ir=fx(4f)
+                          for (i in 0 until 10) {
+                              val angle = Math.toRadians(i * 36.0 - 90.0)
+                              val rad = if (i % 2 == 0) or else ir
+                              val x = cx + (Math.cos(angle)*rad).toFloat()
+                              val y = cy + (Math.sin(angle)*rad).toFloat()
+                              if (i == 0) moveTo(x, y) else lineTo(x, y)
+                          }
+                          close()
+                      }, stroke)
+                      Ic.MENU -> {
+                          cv.drawLine(fx(3f),fy(7f),fx(21f),fy(7f),stroke)
+                          cv.drawLine(fx(3f),fy(12f),fx(21f),fy(12f),stroke)
+                          cv.drawLine(fx(3f),fy(17f),fx(21f),fy(17f),stroke)
+                      }
                   }
                   return bmp
               }
 
-              private fun iconBtn(type: Icon, color: Int = textColor, sizeDp: Int = 22, pad: Int = 10): ImageView {
-                  return ImageView(this).apply {
-                      setImageBitmap(icon(type, sizeDp, color))
-                      scaleType = ImageView.ScaleType.CENTER_INSIDE
-                      val p = dp(pad.toFloat())
-                      setPadding(p, p, p, p)
-                      background = ripple(ColorDrawable(Color.TRANSPARENT))
-                  }
+              private fun iconView(
+                  type: Ic, sizeDp: Int = 22, color: Int = C_TEXT,
+                  padDp: Int = 10, glass: Boolean = false
+              ) = ImageView(this).apply {
+                  setImageBitmap(icon(type, sizeDp, color))
+                  scaleType = ImageView.ScaleType.CENTER_INSIDE
+                  val p = dp(padDp.toFloat())
+                  setPadding(p, p, p, p)
+                  background = ripple(
+                      if (glass) liquidGlass(14f) else ColorDrawable(Color.TRANSPARENT)
+                  )
               }
 
-              // ── onCreate ───────────────────────────────────────────────
-
+              // ══════════════════════════════════════════════════════════
+              //  onCreate
+              // ══════════════════════════════════════════════════════════
               @SuppressLint("SetJavaScriptEnabled")
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
+                  prefs = getSharedPreferences("wi_prefs", Context.MODE_PRIVATE)
+
                   WindowCompat.setDecorFitsSystemWindows(window, false)
                   window.statusBarColor = Color.TRANSPARENT
                   window.navigationBarColor = Color.TRANSPARENT
 
                   root = FrameLayout(this)
-                  root.setBackgroundColor(bg)
+                  root.setBackgroundColor(C_BG)
                   setContentView(root)
 
-                  setupWebView()
-                  setupTopBar()
-                  setupBottomBar()
-                  setupInspectorOverlay()
+                  buildWebView()
+                  buildTopBar()
+                  buildBottomBar()
+                  buildInspectorOverlay()
+                  applyUiVisibility()
 
-                  webView.loadUrl("https://google.com")
+                  webView.loadUrl(homeUrl())
               }
 
-              // ── WebView ────────────────────────────────────────────────
+              private fun homeUrl(): String {
+                  return when (prefs.getString(PREF_ENGINE, ENGINE_GOOGLE)) {
+                      ENGINE_YANDEX   -> "https://yandex.ru"
+                      ENGINE_BING     -> "https://bing.com"
+                      ENGINE_DUCKDUCK -> "https://duckduckgo.com"
+                      ENGINE_BRAVE    -> "https://search.brave.com"
+                      else            -> "https://google.com"
+                  }
+              }
 
+              private fun searchUrl(query: String): String {
+                  val q = query.replace(" ", "+")
+                  return when (prefs.getString(PREF_ENGINE, ENGINE_GOOGLE)) {
+                      ENGINE_YANDEX   -> "https://yandex.ru/search/?text=$q"
+                      ENGINE_BING     -> "https://bing.com/search?q=$q"
+                      ENGINE_DUCKDUCK -> "https://duckduckgo.com/?q=$q"
+                      ENGINE_BRAVE    -> "https://search.brave.com/search?q=$q"
+                      else            -> "https://www.google.com/search?q=$q"
+                  }
+              }
+
+              private fun applyUiVisibility() {
+                  val show = prefs.getBoolean(PREF_SHOW_UI, true)
+                  topBarContainer.visibility    = if (show) View.VISIBLE else View.GONE
+                  bottomBarContainer.visibility = if (show) View.VISIBLE else View.GONE
+              }
+
+              // ══════════════════════════════════════════════════════════
+              //  WebView
+              // ══════════════════════════════════════════════════════════
               @SuppressLint("SetJavaScriptEnabled")
-              private fun setupWebView() {
+              private fun buildWebView() {
                   webView = WebView(this).apply {
                       layoutParams = FrameLayout.LayoutParams(
                           FrameLayout.LayoutParams.MATCH_PARENT,
@@ -323,92 +538,145 @@ jobs:
                           builtInZoomControls = true
                           displayZoomControls = false
                           mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                          userAgentString = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
+                              "Chrome/124.0.0.0 Mobile Safari/537.36"
                       }
                       addJavascriptInterface(Bridge(), "WebInspector")
                       webViewClient = object : WebViewClient() {
                           override fun onPageFinished(view: WebView, url: String) {
                               currentUrl = url
                               urlBar.setText(url)
+                              urlBar.setSelection(0)
                           }
+                          override fun shouldOverrideUrlLoading(
+                              view: WebView, req: WebResourceRequest
+                          ) = false
                       }
+                      webChromeClient = WebChromeClient()
                   }
                   root.addView(webView)
               }
 
-              // ── Top Bar ────────────────────────────────────────────────
-
-              private fun setupTopBar() {
-                  val grad = View(this).apply {
+              // ══════════════════════════════════════════════════════════
+              //  TOP BAR  — iOS 26 floating glass pill
+              // ══════════════════════════════════════════════════════════
+              @SuppressLint("ClickableViewAccessibility")
+              private fun buildTopBar() {
+                  // Gradient scrim behind bar
+                  val scrim = View(this).apply {
                       layoutParams = FrameLayout.LayoutParams(
-                          FrameLayout.LayoutParams.MATCH_PARENT, dp(130f), Gravity.TOP
+                          FrameLayout.LayoutParams.MATCH_PARENT, dp(140f), Gravity.TOP
                       )
                       background = GradientDrawable(
                           GradientDrawable.Orientation.TOP_BOTTOM,
-                          intArrayOf(Color.parseColor("#EE000000"), Color.TRANSPARENT)
+                          intArrayOf(Color.parseColor("#F0000000"), Color.TRANSPARENT)
                       )
                   }
-                  root.addView(grad)
+                  root.addView(scrim)
 
-                  val container = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
-                      gravity = Gravity.CENTER_VERTICAL
+                  val container = FrameLayout(this).apply {
                       layoutParams = FrameLayout.LayoutParams(
                           FrameLayout.LayoutParams.MATCH_PARENT,
-                          FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP
+                          FrameLayout.LayoutParams.WRAP_CONTENT,
+                          Gravity.TOP
                       )
-                      setPadding(dp(12f), dp(52f), dp(12f), dp(8f))
+                      setPadding(dp(12f), dp(54f), dp(12f), dp(8f))
                   }
 
+                  // Main pill
                   val pill = LinearLayout(this).apply {
                       orientation = LinearLayout.HORIZONTAL
                       gravity = Gravity.CENTER_VERTICAL
-                      background = glassDrawable(32f)
-                      setPadding(dp(4f), dp(4f), dp(4f), dp(4f))
+                      background = liquidGlass(28f)
+                      elevation = dp(2f).toFloat()
+                      setPadding(dp(6f), dp(4f), dp(6f), dp(4f))
                   }
 
-                  val back = iconBtn(Icon.BACK).apply {
+                  val back = iconView(Ic.BACK, 18, C_TEXT2, 8).apply {
                       setOnClickListener { if (webView.canGoBack()) webView.goBack() }
                   }
-                  val fwd = iconBtn(Icon.FORWARD).apply {
+                  val fwd = iconView(Ic.FORWARD, 18, C_TEXT2, 8).apply {
                       setOnClickListener { if (webView.canGoForward()) webView.goForward() }
                   }
-                  val ref = iconBtn(Icon.REFRESH).apply {
+                  val ref = iconView(Ic.REFRESH, 18, C_TEXT2, 8).apply {
                       setOnClickListener { webView.reload() }
+                  }
+                  val settingsBtn = iconView(Ic.SETTINGS, 18, C_TEXT2, 8).apply {
+                      setOnClickListener { showSettings() }
+                  }
+
+                  // URL bar inner pill
+                  val urlPill = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER_VERTICAL
+                      background = object : Drawable() {
+                          val p = Paint(Paint.ANTI_ALIAS_FLAG)
+                          override fun draw(c: Canvas) {
+                              val r = bounds.height() / 2f
+                              p.color = Color.parseColor("#20FFFFFF")
+                              c.drawRoundRect(RectF(bounds), r, r, p)
+                              p.color = Color.parseColor("#18FFFFFF")
+                              p.style = Paint.Style.STROKE
+                              p.strokeWidth = dp(0.5f).toFloat()
+                              c.drawRoundRect(RectF(bounds), r, r, p)
+                              p.style = Paint.Style.FILL
+                          }
+                          override fun setAlpha(a: Int) {}
+                          override fun setColorFilter(cf: ColorFilter?) {}
+                          @Suppress("OVERRIDE_DEPRECATION")
+                          override fun getOpacity() = PixelFormat.TRANSLUCENT
+                      }
+                      setPadding(dp(10f), 0, dp(8f), 0)
+                  }
+
+                  val globeIv = ImageView(this).apply {
+                      setImageBitmap(icon(Ic.GLOBE, 13, C_TEXT3))
+                      scaleType = ImageView.ScaleType.CENTER_INSIDE
                   }
 
                   urlBar = EditText(this).apply {
                       background = null
-                      setTextColor(textColor)
-                      setHintTextColor(textSub)
-                      hint = "Search or enter URL"
+                      setTextColor(C_TEXT)
+                      setHintTextColor(C_TEXT3)
+                      hint = "Search or URL"
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
                       maxLines = 1
                       imeOptions = EditorInfo.IME_ACTION_GO
                       inputType = android.text.InputType.TYPE_CLASS_TEXT or
                               android.text.InputType.TYPE_TEXT_VARIATION_URI
+                      typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
                       setOnEditorActionListener { _, actionId, _ ->
                           if (actionId == EditorInfo.IME_ACTION_GO) { navigate(); true } else false
                       }
+                      setOnFocusChangeListener { _, hasFocus -> if (hasFocus) selectAll() }
                   }
 
-                  pill.addView(back, LinearLayout.LayoutParams(dp(40f), dp(40f)))
-                  pill.addView(fwd,  LinearLayout.LayoutParams(dp(40f), dp(40f)))
-                  pill.addView(urlBar, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                  pill.addView(ref,  LinearLayout.LayoutParams(dp(40f), dp(40f)))
+                  urlPill.addView(globeIv, LinearLayout.LayoutParams(dp(16f), dp(16f)))
+                  urlPill.addView(urlBar, LinearLayout.LayoutParams(
+                      0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+                  ).apply { setMargins(dp(6f), 0, 0, 0) })
 
-                  container.addView(pill, LinearLayout.LayoutParams(
-                      LinearLayout.LayoutParams.MATCH_PARENT,
-                      dp(52f)
-                  ))
+                  pill.addView(back, LinearLayout.LayoutParams(dp(36f), dp(36f)))
+                  pill.addView(fwd,  LinearLayout.LayoutParams(dp(36f), dp(36f)))
+                  pill.addView(urlPill, LinearLayout.LayoutParams(0, dp(34f), 1f).apply {
+                      setMargins(dp(4f), 0, dp(4f), 0)
+                  })
+                  pill.addView(ref,         LinearLayout.LayoutParams(dp(36f), dp(36f)))
+                  pill.addView(settingsBtn, LinearLayout.LayoutParams(dp(36f), dp(36f)))
+
+                  container.addView(pill)
+                  topBarContainer = container
+                  root.addView(scrim)
                   root.addView(container)
               }
 
               private fun navigate() {
-                  var url = urlBar.text.toString().trim()
-                  if (url.isEmpty()) return
-                  if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                      url = if (url.contains(".") && !url.contains(" ")) "https://$url"
-                      else "https://www.google.com/search?q=${url.replace(" ", "+")}"
+                  var raw = urlBar.text.toString().trim()
+                  if (raw.isEmpty()) return
+                  val url = when {
+                      raw.startsWith("http://") || raw.startsWith("https://") -> raw
+                      raw.contains(".") && !raw.contains(" ") -> "https://$raw"
+                      else -> searchUrl(raw)
                   }
                   webView.loadUrl(url)
                   (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
@@ -416,108 +684,165 @@ jobs:
                   urlBar.clearFocus()
               }
 
-              // ── Bottom Bar ─────────────────────────────────────────────
-
-              private fun setupBottomBar() {
-                  val grad = View(this).apply {
+              // ══════════════════════════════════════════════════════════
+              //  BOTTOM BAR  — iOS 26 floating toolbar
+              // ══════════════════════════════════════════════════════════
+              private fun buildBottomBar() {
+                  val scrim = View(this).apply {
                       layoutParams = FrameLayout.LayoutParams(
-                          FrameLayout.LayoutParams.MATCH_PARENT, dp(130f), Gravity.BOTTOM
+                          FrameLayout.LayoutParams.MATCH_PARENT, dp(140f), Gravity.BOTTOM
                       )
                       background = GradientDrawable(
                           GradientDrawable.Orientation.BOTTOM_TOP,
-                          intArrayOf(Color.parseColor("#EE000000"), Color.TRANSPARENT)
+                          intArrayOf(Color.parseColor("#F0000000"), Color.TRANSPARENT)
                       )
                   }
-                  root.addView(grad)
 
                   val bar = LinearLayout(this).apply {
                       orientation = LinearLayout.HORIZONTAL
                       gravity = Gravity.CENTER
                       layoutParams = FrameLayout.LayoutParams(
                           FrameLayout.LayoutParams.MATCH_PARENT,
-                          FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM
+                          FrameLayout.LayoutParams.WRAP_CONTENT,
+                          Gravity.BOTTOM
                       )
-                      setPadding(dp(16f), dp(8f), dp(16f), dp(36f))
+                      setPadding(dp(16f), 0, dp(16f), dp(34f))
                   }
 
                   val pill = LinearLayout(this).apply {
                       orientation = LinearLayout.HORIZONTAL
                       gravity = Gravity.CENTER
-                      background = glassDrawable(28f)
-                      setPadding(dp(8f), dp(8f), dp(8f), dp(8f))
+                      background = liquidGlass(32f)
+                      elevation = dp(4f).toFloat()
+                      setPadding(dp(6f), dp(6f), dp(6f), dp(6f))
                   }
 
-                  pill.addView(toolBtn("Inspect", Icon.INSPECT, true)  { toggleInspector() })
-                  pill.addView(toolBtn("Source",  Icon.CODE)            { showSource() })
-                  pill.addView(toolBtn("Files",   Icon.FOLDER)          { showFiles() })
+                  pill.addView(tabBtn(Ic.INSPECT, "Inspect", accented = true) { toggleInspector() })
+                  pill.addView(vDivider())
+                  pill.addView(tabBtn(Ic.CODE, "Source") { showSource() })
+                  pill.addView(vDivider())
+                  pill.addView(tabBtn(Ic.FOLDER, "Files") { showFiles() })
 
-                  bar.addView(pill)
-                  root.addView(bar)
+                  bar.addView(pill, LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.WRAP_CONTENT,
+                      ViewGroup.LayoutParams.WRAP_CONTENT
+                  ))
+
+                  val container = FrameLayout(this).apply {
+                      layoutParams = FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.MATCH_PARENT,
+                          FrameLayout.LayoutParams.WRAP_CONTENT,
+                          Gravity.BOTTOM
+                      )
+                  }
+                  container.addView(scrim)
+                  container.addView(bar)
+
+                  bottomBarContainer = container
+                  root.addView(container)
               }
 
-              private fun toolBtn(label: String, icon: Icon, accented: Boolean = false, action: () -> Unit): LinearLayout {
+              private fun vDivider() = View(this).apply {
+                  layoutParams = LinearLayout.LayoutParams(dp(0.5f).coerceAtLeast(1), dp(28f)).apply {
+                      setMargins(dp(2f), 0, dp(2f), 0)
+                  }
+                  setBackgroundColor(Color.parseColor("#30FFFFFF"))
+              }
+
+              private fun tabBtn(
+                  ic: Ic, label: String,
+                  accented: Boolean = false,
+                  action: () -> Unit
+              ): LinearLayout {
                   return LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       gravity = Gravity.CENTER
-                      setPadding(dp(4f), dp(4f), dp(4f), dp(4f))
-                      background = ripple(if (accented) accentDrawable(14f) else glassDrawable(14f))
+                      background = ripple(
+                          if (accented) accentGlass(18f) else ColorDrawable(Color.TRANSPARENT)
+                      )
+                      setPadding(dp(14f), dp(8f), dp(14f), dp(8f))
                       setOnClickListener { action() }
+
                       addView(ImageView(this@MainActivity).apply {
-                          setImageBitmap(icon(icon, 20, textColor))
+                          setImageBitmap(icon(ic, 21, C_TEXT))
                           scaleType = ImageView.ScaleType.CENTER_INSIDE
-                      }, LinearLayout.LayoutParams(dp(28f), dp(28f)))
+                      }, LinearLayout.LayoutParams(dp(26f), dp(26f)))
+
                       addView(TextView(this@MainActivity).apply {
                           text = label
-                          setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f)
-                          setTextColor(if (accented) textColor else textSub)
+                          setTextColor(if (accented) C_TEXT else C_TEXT3)
+                          setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f)
                           gravity = Gravity.CENTER
-                      }, LinearLayout.LayoutParams(dp(60f), ViewGroup.LayoutParams.WRAP_CONTENT))
-                      layoutParams = LinearLayout.LayoutParams(dp(68f), dp(64f)).apply {
-                          setMargins(dp(4f), 0, dp(4f), 0)
-                      }
+                          typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                      }, LinearLayout.LayoutParams(dp(60f), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                          setMargins(0, dp(3f), 0, 0)
+                      })
                   }
               }
 
-              // ── Inspector Overlay ──────────────────────────────────────
-
-              private fun setupInspectorOverlay() {
+              // ══════════════════════════════════════════════════════════
+              //  INSPECTOR OVERLAY
+              // ══════════════════════════════════════════════════════════
+              private fun buildInspectorOverlay() {
                   inspectorBanner = LinearLayout(this).apply {
                       orientation = LinearLayout.HORIZONTAL
                       gravity = Gravity.CENTER_VERTICAL
-                      background = GradientDrawable().apply {
-                          setColor(Color.parseColor("#CC6C63FF"))
-                          cornerRadius = dp(20f).toFloat()
+                      background = object : Drawable() {
+                          val p = Paint(Paint.ANTI_ALIAS_FLAG)
+                          override fun draw(c: Canvas) {
+                              val rc = RectF(bounds)
+                              val r = dp(20f).toFloat()
+                              p.shader = LinearGradient(0f, 0f, rc.width(), 0f,
+                                  intArrayOf(Color.parseColor("#CC6C63FF"), Color.parseColor("#CC9D50FF")),
+                                  null, Shader.TileMode.CLAMP)
+                              c.drawRoundRect(rc, r, r, p)
+                              p.shader = null
+                              p.color = Color.parseColor("#40FFFFFF")
+                              val top = RectF(rc.left+dp(1f), rc.top+dp(1f), rc.right-dp(1f), rc.top+rc.height()*0.45f)
+                              c.drawRoundRect(top, r, r, p)
+                          }
+                          override fun setAlpha(a: Int) {}
+                          override fun setColorFilter(cf: ColorFilter?) {}
+                          @Suppress("OVERRIDE_DEPRECATION")
+                          override fun getOpacity() = PixelFormat.TRANSLUCENT
                       }
-                      setPadding(dp(16f), dp(10f), dp(10f), dp(10f))
-                      visibility = View.GONE
+                      setPadding(dp(14f), dp(10f), dp(10f), dp(10f))
                       elevation = dp(8f).toFloat()
+                      visibility = View.GONE
                   }
 
-                  val txt = TextView(this).apply {
-                      text = "Tap any element to inspect"
-                      setTextColor(textColor)
+                  inspectorBanner.addView(ImageView(this).apply {
+                      setImageBitmap(icon(Ic.INSPECT, 16, C_TEXT))
+                      scaleType = ImageView.ScaleType.CENTER_INSIDE
+                  }, LinearLayout.LayoutParams(dp(20f), dp(20f)))
+
+                  inspectorBanner.addView(TextView(this).apply {
+                      text = "  Tap any element to inspect"
+                      setTextColor(C_TEXT)
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                  }
-                  inspectorBanner.addView(txt, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                  inspectorBanner.addView(iconBtn(Icon.CLOSE, textColor, 18).apply {
+                      typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+                  }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+
+                  inspectorBanner.addView(iconView(Ic.CLOSE, 16, C_TEXT, 8).apply {
                       setOnClickListener { toggleInspector() }
-                  }, LinearLayout.LayoutParams(dp(36f), dp(36f)))
+                  }, LinearLayout.LayoutParams(dp(34f), dp(34f)))
 
                   root.addView(inspectorBanner, FrameLayout.LayoutParams(
                       FrameLayout.LayoutParams.MATCH_PARENT,
                       ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP
-                  ).apply { setMargins(dp(16f), dp(108f), dp(16f), 0) })
+                  ).apply { setMargins(dp(16f), dp(110f), dp(16f), 0) })
 
+                  // Inspected element panel
                   inspectedPanel = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
-                      background = glassDrawable(24f)
-                      setPadding(dp(16f), dp(16f), dp(16f), dp(16f))
+                      background = liquidGlass(26f)
+                      setPadding(dp(16f), dp(16f), dp(16f), dp(20f))
                       visibility = View.GONE
-                      elevation = dp(12f).toFloat()
+                      elevation = dp(16f).toFloat()
                   }
                   root.addView(inspectedPanel, FrameLayout.LayoutParams(
-                      FrameLayout.LayoutParams.MATCH_PARENT, dp(320f), Gravity.BOTTOM
-                  ).apply { setMargins(dp(8f), 0, dp(8f), dp(96f)) })
+                      FrameLayout.LayoutParams.MATCH_PARENT, dp(340f), Gravity.BOTTOM
+                  ).apply { setMargins(dp(8f), 0, dp(8f), dp(100f)) })
               }
 
               private fun toggleInspector() {
@@ -525,54 +850,76 @@ jobs:
                   if (inspectorMode) {
                       inspectorBanner.visibility = View.VISIBLE
                       inspectorBanner.alpha = 0f
-                      inspectorBanner.animate().alpha(1f).setDuration(250).start()
-                      webView.evaluateJavascript(inspectorJS(), null)
+                      inspectorBanner.translationY = -dp(20f).toFloat()
+                      inspectorBanner.animate().alpha(1f).translationY(0f)
+                          .setDuration(300).setInterpolator(DecelerateInterpolator(2f)).start()
+                      webView.evaluateJavascript(jsInspector(), null)
                   } else {
                       inspectorBanner.animate().alpha(0f).setDuration(200).withEndAction {
                           inspectorBanner.visibility = View.GONE
                           inspectorBanner.alpha = 1f
                       }.start()
-                      inspectedPanel.animate().translationY(dp(400f).toFloat()).setDuration(250).withEndAction {
-                          inspectedPanel.visibility = View.GONE
-                          inspectedPanel.translationY = 0f
-                      }.start()
+                      hidePanel()
                       webView.evaluateJavascript("if(window.__wiClean)window.__wiClean();", null)
                   }
               }
 
+              private fun hidePanel() {
+                  if (inspectedPanel.visibility != View.VISIBLE) return
+                  inspectedPanel.animate().translationY(dp(500f).toFloat()).setDuration(280)
+                      .setInterpolator(DecelerateInterpolator(2f)).withEndAction {
+                          inspectedPanel.visibility = View.GONE
+                          inspectedPanel.translationY = 0f
+                      }.start()
+              }
+
+              private fun showPanel() {
+                  inspectedPanel.visibility = View.VISIBLE
+                  inspectedPanel.translationY = dp(500f).toFloat()
+                  inspectedPanel.animate().translationY(0f).setDuration(380)
+                      .setInterpolator(DecelerateInterpolator(2.5f)).start()
+              }
+
+              // ══════════════════════════════════════════════════════════
+              //  ELEMENT PANEL
+              // ══════════════════════════════════════════════════════════
               private fun showElement(tag: String, id: String, html: String, css: String) {
                   inspectedPanel.removeAllViews()
 
-                  // Tag badge
-                  val header = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
-                      gravity = Gravity.CENTER_VERTICAL
+                  // Header row
+                  val hdr = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
                   }
-                  header.addView(TextView(this).apply {
-                      text = " <$tag> "
-                      setTextColor(accent)
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                      background = GradientDrawable().apply { setColor(accentGlow); cornerRadius = dp(8f).toFloat() }
-                      setPadding(dp(8f), dp(4f), dp(8f), dp(4f))
-                  })
-                  header.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
-                  header.addView(iconBtn(Icon.CLOSE, textSub, 16).apply {
-                      setOnClickListener {
-                          inspectedPanel.animate().translationY(dp(400f).toFloat()).setDuration(250).withEndAction {
-                              inspectedPanel.visibility = View.GONE; inspectedPanel.translationY = 0f
-                          }.start()
-                      }
-                  }, LinearLayout.LayoutParams(dp(32f), dp(32f)))
-                  inspectedPanel.addView(header)
 
-                  // Tabs
-                  val tabs = LinearLayout(this).apply {
+                  // Tag chip
+                  hdr.addView(glassChip("<$tag>", C_ACCENT))
+                  if (id.isNotEmpty()) hdr.addView(glassChip("#$id", C_SUCCESS))
+
+                  hdr.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+                  hdr.addView(iconView(Ic.CLOSE, 16, C_TEXT3, 6).apply {
+                      setOnClickListener { hidePanel() }
+                  }, LinearLayout.LayoutParams(dp(32f), dp(32f)))
+                  inspectedPanel.addView(hdr)
+
+                  // Tab strip
+                  val tabStrip = LinearLayout(this).apply {
                       orientation = LinearLayout.HORIZONTAL
-                      background = GradientDrawable().apply { setColor(white10); cornerRadius = dp(12f).toFloat() }
-                      setPadding(dp(4f), dp(4f), dp(4f), dp(4f))
+                      background = object : Drawable() {
+                          val p = Paint(Paint.ANTI_ALIAS_FLAG)
+                          override fun draw(c: Canvas) {
+                              val r = dp(12f).toFloat()
+                              p.color = Color.parseColor("#18FFFFFF")
+                              c.drawRoundRect(RectF(bounds), r, r, p)
+                          }
+                          override fun setAlpha(a: Int) {}
+                          override fun setColorFilter(cf: ColorFilter?) {}
+                          @Suppress("OVERRIDE_DEPRECATION")
+                          override fun getOpacity() = PixelFormat.TRANSLUCENT
+                      }
+                      setPadding(dp(3f), dp(3f), dp(3f), dp(3f))
                   }
-                  inspectedPanel.addView(tabs, LinearLayout.LayoutParams(
-                      LinearLayout.LayoutParams.MATCH_PARENT, dp(40f)
+                  inspectedPanel.addView(tabStrip, LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT, dp(38f)
                   ).apply { setMargins(0, dp(12f), 0, dp(8f)) })
 
                   val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -582,56 +929,96 @@ jobs:
                       LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
                   ))
 
-                  var activeTab = 0
-                  val tabViews = mutableListOf<TextView>()
+                  var active = 0
+                  val tabs = mutableListOf<TextView>()
+
+                  fun updateTabStyle(i: Int, selected: Boolean) {
+                      tabs[i].background = if (selected) accentGlass(9f) else null
+                      tabs[i].setTextColor(if (selected) C_TEXT else C_TEXT3)
+                  }
 
                   fun showTab(i: Int) {
                       content.removeAllViews()
                       when (i) {
+                          // HTML editor
                           0 -> {
                               val et = EditText(this).apply {
                                   setText(html)
                                   setTextColor(Color.parseColor("#E2E8F0"))
-                                  setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-                                  background = GradientDrawable().apply { setColor(white10); cornerRadius = dp(12f).toFloat() }
+                                  setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+                                  background = object : Drawable() {
+                                      val p = Paint(Paint.ANTI_ALIAS_FLAG)
+                                      override fun draw(c: Canvas) {
+                                          p.color = Color.parseColor("#0D1117")
+                                          val r = dp(12f).toFloat()
+                                          c.drawRoundRect(RectF(bounds), r, r, p)
+                                          p.color = Color.parseColor("#20FFFFFF")
+                                          p.style = Paint.Style.STROKE; p.strokeWidth = dp(0.5f).toFloat()
+                                          c.drawRoundRect(RectF(bounds), r, r, p)
+                                          p.style = Paint.Style.FILL
+                                      }
+                                      override fun setAlpha(a: Int) {}
+                                      override fun setColorFilter(cf: ColorFilter?) {}
+                                      @Suppress("OVERRIDE_DEPRECATION")
+                                      override fun getOpacity() = PixelFormat.TRANSLUCENT
+                                  }
                                   setPadding(dp(12f), dp(12f), dp(12f), dp(12f))
                                   typeface = Typeface.MONOSPACE
-                                  gravity = Gravity.TOP; minLines = 4
+                                  gravity = Gravity.TOP; minLines = 5
+                                  setHorizontallyScrolling(false)
                               }
                               content.addView(et)
+                              // Apply btn
                               content.addView(TextView(this).apply {
-                                  text = "Apply"
+                                  text = "Apply Changes"
                                   gravity = Gravity.CENTER
-                                  setTextColor(textColor)
+                                  setTextColor(C_TEXT)
                                   setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                                  background = ripple(accentDrawable(12f))
-                                  setPadding(0, dp(12f), 0, dp(12f))
+                                  typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                                  background = ripple(accentGlass(12f))
+                                  setPadding(0, 0, 0, 0)
                                   setOnClickListener {
                                       val esc = et.text.toString()
-                                          .replace("\\", "\\\\").replace("'", "\\'")
-                                          .replace("\n", "\\n")
+                                          .replace("\\","\\\\").replace("'","\\'").replace("\n","\\n")
                                       webView.evaluateJavascript(
-                                          "if(window.__wiSel)window.__wiSel.outerHTML='$esc'", null
+                                          "if(window.__wiSel){window.__wiSel.outerHTML='$esc';}", null
                                       )
+                                      toast("Applied!")
                                   }
                               }, LinearLayout.LayoutParams(
-                                  LinearLayout.LayoutParams.MATCH_PARENT, dp(44f)
-                              ).apply { setMargins(0, dp(8f), 0, 0) })
+                                  LinearLayout.LayoutParams.MATCH_PARENT, dp(46f)
+                              ).apply { setMargins(0, dp(10f), 0, 0) })
                           }
+                          // CSS view
                           1 -> content.addView(TextView(this).apply {
                               text = css
-                              setTextColor(Color.parseColor("#A8DADC"))
-                              setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-                              background = GradientDrawable().apply { setColor(white10); cornerRadius = dp(12f).toFloat() }
+                              setTextColor(Color.parseColor("#7FDBCA"))
+                              setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+                              background = object : Drawable() {
+                                  val p = Paint(Paint.ANTI_ALIAS_FLAG)
+                                  override fun draw(c: Canvas) {
+                                      p.color = Color.parseColor("#0D1117")
+                                      c.drawRoundRect(RectF(bounds), dp(12f).toFloat(), dp(12f).toFloat(), p)
+                                  }
+                                  override fun setAlpha(a: Int) {}
+                                  override fun setColorFilter(cf: ColorFilter?) {}
+                                  @Suppress("OVERRIDE_DEPRECATION")
+                                  override fun getOpacity() = PixelFormat.TRANSLUCENT
+                              }
                               setPadding(dp(12f), dp(12f), dp(12f), dp(12f))
                               typeface = Typeface.MONOSPACE
+                              setTextIsSelectable(true)
                           })
+                          // Preview
                           2 -> {
                               val wv = WebView(this).apply {
                                   settings.javaScriptEnabled = true
+                                  background = GradientDrawable().apply {
+                                      setColor(Color.WHITE); cornerRadius = dp(12f).toFloat()
+                                  }
                                   loadDataWithBaseURL(currentUrl,
-                                      "<html><body style='margin:8px;background:#fff'>$html</body></html>",
-                                      "text/html", "UTF-8", null)
+                                      "<html><body style='margin:10px;background:#fff;font-family:sans-serif'>$html</body></html>",
+                                      "text/html","UTF-8",null)
                               }
                               content.addView(wv, LinearLayout.LayoutParams(
                                   LinearLayout.LayoutParams.MATCH_PARENT, dp(200f)
@@ -645,172 +1032,493 @@ jobs:
                           text = name
                           gravity = Gravity.CENTER
                           setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                          setTextColor(if (i == 0) textColor else textSub)
-                          background = if (i == 0) GradientDrawable().apply {
-                              setColor(accent); cornerRadius = dp(10f).toFloat()
-                          } else null
-                          setPadding(dp(4f), dp(4f), dp(4f), dp(4f))
+                          typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                          background = if (i == 0) accentGlass(9f) else null
+                          setTextColor(if (i == 0) C_TEXT else C_TEXT3)
+                          setPadding(dp(4f), dp(3f), dp(4f), dp(3f))
                           setOnClickListener {
-                              tabViews[activeTab].setTextColor(textSub); tabViews[activeTab].background = null
-                              activeTab = i; setTextColor(textColor)
-                              background = GradientDrawable().apply { setColor(accent); cornerRadius = dp(10f).toFloat() }
+                              updateTabStyle(active, false)
+                              active = i
+                              updateTabStyle(i, true)
                               showTab(i)
                           }
                       }
-                      tabViews.add(tv)
-                      tabs.addView(tv, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
+                      tabs.add(tv)
+                      tabStrip.addView(tv, LinearLayout.LayoutParams(
+                          0, ViewGroup.LayoutParams.MATCH_PARENT, 1f
+                      ))
                   }
                   showTab(0)
-
-                  inspectedPanel.visibility = View.VISIBLE
-                  inspectedPanel.translationY = dp(400f).toFloat()
-                  inspectedPanel.animate().translationY(0f).setDuration(350)
-                      .setInterpolator(DecelerateInterpolator(2.5f)).start()
+                  showPanel()
               }
 
-              // ── Source ─────────────────────────────────────────────────
-
-              private fun showSource() {
-                  webView.evaluateJavascript(
-                      "(function(){return document.documentElement.outerHTML})();"
-                  ) { result ->
-                      val html = result?.removeSurrounding("\"")
-                          ?.replace("\\n", "\n")?.replace("\\t", "\t")?.replace("\\\"", "\"") ?: ""
-                      showSheet("Page Source", html)
+              private fun glassChip(text: String, color: Int): TextView {
+                  return TextView(this).apply {
+                      this.text = text
+                      setTextColor(color)
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                      typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                      background = object : Drawable() {
+                          val p = Paint(Paint.ANTI_ALIAS_FLAG)
+                          override fun draw(c: Canvas) {
+                              val r = bounds.height() / 2f
+                              p.color = Color.argb(30, Color.red(color), Color.green(color), Color.blue(color))
+                              c.drawRoundRect(RectF(bounds), r, r, p)
+                              p.color = Color.argb(60, Color.red(color), Color.green(color), Color.blue(color))
+                              p.style = Paint.Style.STROKE; p.strokeWidth = dp(0.7f).toFloat()
+                              c.drawRoundRect(RectF(bounds), r, r, p); p.style = Paint.Style.FILL
+                          }
+                          override fun setAlpha(a: Int) {}
+                          override fun setColorFilter(cf: ColorFilter?) {}
+                          @Suppress("OVERRIDE_DEPRECATION")
+                          override fun getOpacity() = PixelFormat.TRANSLUCENT
+                      }
+                      setPadding(dp(10f), dp(4f), dp(10f), dp(4f))
+                      layoutParams = LinearLayout.LayoutParams(
+                          ViewGroup.LayoutParams.WRAP_CONTENT,
+                          ViewGroup.LayoutParams.WRAP_CONTENT
+                      ).apply { setMargins(0, 0, dp(6f), 0) }
                   }
               }
 
-              private fun showSheet(title: String, code: String) {
+              // ══════════════════════════════════════════════════════════
+              //  SETTINGS SHEET
+              // ══════════════════════════════════════════════════════════
+              private fun showSettings() {
                   val d = Dialog(this, android.R.style.Theme_NoTitleBar_Fullscreen)
-                  val root2 = FrameLayout(this)
-                  root2.setBackgroundColor(Color.parseColor("#CC000000"))
+                  val overlay = FrameLayout(this).apply {
+                      setBackgroundColor(Color.parseColor("#80000000"))
+                  }
+                  // Dismiss on outside tap
+                  overlay.setOnClickListener { d.dismiss() }
 
                   val sheet = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
-                      background = glassDrawable(28f)
-                      setPadding(dp(16f), dp(16f), dp(16f), dp(16f))
+                      background = liquidGlass(28f)
+                      setPadding(dp(20f), dp(20f), dp(20f), dp(34f))
+                      elevation = dp(20f).toFloat()
+                  }
+                  sheet.setOnClickListener { /* consume */ }
+
+                  // Handle bar
+                  sheet.addView(View(this).apply {
+                      background = GradientDrawable().apply {
+                          setColor(Color.parseColor("#40FFFFFF"))
+                          cornerRadius = dp(2f).toFloat()
+                      }
+                  }, LinearLayout.LayoutParams(dp(36f), dp(4f)).apply {
+                      gravity = Gravity.CENTER_HORIZONTAL
+                      setMargins(0, 0, 0, dp(20f))
+                  }.also { it.gravity = Gravity.CENTER_HORIZONTAL })
+
+                  // Title
+                  sheet.addView(LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER_VERTICAL
+                      addView(ImageView(this@MainActivity).apply {
+                          setImageBitmap(icon(Ic.SETTINGS, 20, C_TEXT))
+                      }, LinearLayout.LayoutParams(dp(24f), dp(24f)))
+                      addView(TextView(this@MainActivity).apply {
+                          text = "  Settings"
+                          setTextColor(C_TEXT)
+                          setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+                          typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                      })
+                  })
+
+                  sheet.addView(settingsDivider())
+
+                  // ── Toggle UI ──────────────────────────────────────────
+                  val showUi = prefs.getBoolean(PREF_SHOW_UI, true)
+                  sheet.addView(settingsLabel("Browser Mode"))
+                  sheet.addView(settingsToggleRow(
+                      Ic.BROWSER, "Show Inspector Toolbar",
+                      "Hide all UI — pure browser mode", showUi
+                  ) { checked ->
+                      prefs.edit().putBoolean(PREF_SHOW_UI, checked).apply()
+                      applyUiVisibility()
+                  })
+
+                  sheet.addView(settingsDivider())
+
+                  // ── Search Engine ──────────────────────────────────────
+                  sheet.addView(settingsLabel("Search Engine"))
+
+                  val engines = listOf(
+                      Triple(ENGINE_GOOGLE,   Ic.STAR,  "Google"),
+                      Triple(ENGINE_YANDEX,   Ic.GLOBE, "Yandex"),
+                      Triple(ENGINE_BING,     Ic.GLOBE, "Bing"),
+                      Triple(ENGINE_DUCKDUCK, Ic.SHIELD,"DuckDuckGo"),
+                      Triple(ENGINE_BRAVE,    Ic.SHIELD,"Brave Search")
+                  )
+
+                  val currentEngine = prefs.getString(PREF_ENGINE, ENGINE_GOOGLE)
+                  val engineRows = mutableListOf<View>()
+
+                  engines.forEach { (key, ic, name) ->
+                      val row = settingsSelectRow(ic, name, key == currentEngine) {
+                          prefs.edit().putString(PREF_ENGINE, key).apply()
+                          engineRows.forEach { r ->
+                              r.findViewWithTag<ImageView>("check")
+                                  ?.setImageBitmap(icon(Ic.CHECK, 16,
+                                      if (r.tag == key) C_ACCENT else Color.TRANSPARENT))
+                              r.tag?.let { t ->
+                                  r.findViewWithTag<TextView>("label")
+                                      ?.setTextColor(if (t == key) C_ACCENT else C_TEXT2)
+                              }
+                          }
+                      }
+                      row.tag = key
+                      engineRows.add(row)
+                      sheet.addView(row)
+                  }
+
+                  sheet.addView(settingsDivider())
+
+                  // ── About ──────────────────────────────────────────────
+                  sheet.addView(settingsLabel("About"))
+                  sheet.addView(TextView(this).apply {
+                      text = "WebInspector v1.0  ·  iOS 26 Design"
+                      setTextColor(C_TEXT3)
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                      setPadding(0, dp(4f), 0, dp(8f))
+                  })
+
+                  val sheetH = (resources.displayMetrics.heightPixels * 0.78).toInt()
+                  val sv = ScrollView(this)
+                  sv.addView(sheet)
+
+                  overlay.addView(sv, FrameLayout.LayoutParams(
+                      FrameLayout.LayoutParams.MATCH_PARENT, sheetH, Gravity.BOTTOM
+                  ).apply { setMargins(dp(6f), 0, dp(6f), 0) })
+
+                  d.setContentView(overlay)
+                  d.show()
+
+                  sv.translationY = sheetH.toFloat()
+                  sv.animate().translationY(0f).setDuration(380)
+                      .setInterpolator(DecelerateInterpolator(2.5f)).start()
+              }
+
+              private fun settingsLabel(text: String) = TextView(this).apply {
+                  this.text = text
+                  setTextColor(C_TEXT3)
+                  setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                  typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                  setPadding(0, dp(12f), 0, dp(6f))
+              }
+
+              private fun settingsDivider() = View(this).apply {
+                  layoutParams = LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT, dp(0.5f).coerceAtLeast(1)
+                  ).apply { setMargins(0, dp(8f), 0, dp(8f)) }
+                  setBackgroundColor(Color.parseColor("#20FFFFFF"))
+              }
+
+              private fun settingsToggleRow(
+                  ic: Ic, title: String, sub: String,
+                  checked: Boolean, onChange: (Boolean) -> Unit
+              ): LinearLayout {
+                  var state = checked
+                  val row = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER_VERTICAL
+                      background = ripple(ColorDrawable(Color.TRANSPARENT))
+                      setPadding(0, dp(10f), 0, dp(10f))
+                  }
+                  row.addView(ImageView(this).apply {
+                      setImageBitmap(icon(ic, 20, C_TEXT2))
+                  }, LinearLayout.LayoutParams(dp(24f), dp(24f)).apply {
+                      setMargins(0, 0, dp(14f), 0)
+                  })
+                  val textCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                  textCol.addView(TextView(this).apply {
+                      text = title; setTextColor(C_TEXT2); setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                  })
+                  textCol.addView(TextView(this).apply {
+                      text = sub; setTextColor(C_TEXT3); setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                  })
+                  row.addView(textCol, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+
+                  // Custom iOS-style toggle
+                  val toggle = buildToggle(state)
+                  row.addView(toggle, LinearLayout.LayoutParams(dp(48f), dp(28f)))
+                  row.setOnClickListener {
+                      state = !state
+                      animateToggle(toggle, state)
+                      onChange(state)
+                  }
+                  return row
+              }
+
+              private fun buildToggle(on: Boolean): FrameLayout {
+                  val trackColor = if (on) C_ACCENT else Color.parseColor("#40FFFFFF")
+                  return FrameLayout(this).apply {
+                      background = GradientDrawable().apply {
+                          setColor(trackColor); cornerRadius = dp(14f).toFloat()
+                      }
+                      tag = on
+                      addView(View(this@MainActivity).apply {
+                          background = GradientDrawable().apply {
+                              setColor(Color.WHITE); cornerRadius = dp(11f).toFloat()
+                              setStroke(dp(0.5f), Color.parseColor("#20000000"))
+                          }
+                          elevation = dp(2f).toFloat()
+                      }, FrameLayout.LayoutParams(dp(22f), dp(22f), Gravity.CENTER_VERTICAL).apply {
+                          setMargins(if (on) dp(24f) else dp(2f), 0, 0, 0)
+                      })
+                  }
+              }
+
+              private fun animateToggle(toggle: FrameLayout, on: Boolean) {
+                  val track = toggle.background as GradientDrawable
+                  val thumb = toggle.getChildAt(0)
+                  val fromX = if (on) dp(2f).toFloat() else dp(24f).toFloat()
+                  val toX   = if (on) dp(24f).toFloat() else dp(2f).toFloat()
+                  thumb.animate().translationX(toX - fromX).setDuration(220)
+                      .setInterpolator(DecelerateInterpolator(2f)).withEndAction {
+                          (thumb.layoutParams as FrameLayout.LayoutParams).setMargins(toX.toInt(), 0, 0, 0)
+                          thumb.translationX = 0f
+                      }.start()
+                  track.setColor(if (on) C_ACCENT else Color.parseColor("#40FFFFFF"))
+              }
+
+              private fun settingsSelectRow(
+                  ic: Ic, name: String, selected: Boolean, onSelect: () -> Unit
+              ): LinearLayout {
+                  return LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER_VERTICAL
+                      background = ripple(ColorDrawable(Color.TRANSPARENT))
+                      setPadding(0, dp(10f), 0, dp(10f))
+                      setOnClickListener { onSelect() }
+
+                      addView(ImageView(this@MainActivity).apply {
+                          setImageBitmap(icon(ic, 18, C_TEXT3))
+                      }, LinearLayout.LayoutParams(dp(22f), dp(22f)).apply {
+                          setMargins(0, 0, dp(14f), 0)
+                      })
+
+                      addView(TextView(this@MainActivity).apply {
+                          text = name
+                          setTextColor(if (selected) C_ACCENT else C_TEXT2)
+                          setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                          tag = "label"
+                      }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+
+                      addView(ImageView(this@MainActivity).apply {
+                          setImageBitmap(icon(Ic.CHECK, 16, if (selected) C_ACCENT else Color.TRANSPARENT))
+                          tag = "check"
+                      }, LinearLayout.LayoutParams(dp(20f), dp(20f)))
+                  }
+              }
+
+              // ══════════════════════════════════════════════════════════
+              //  SOURCE VIEWER
+              // ══════════════════════════════════════════════════════════
+              private fun showSource() {
+                  webView.evaluateJavascript(
+                      "(function(){return document.documentElement.outerHTML})();"
+                  ) { res ->
+                      val html = res?.removeSurrounding("\"")
+                          ?.replace("\\n", "\n")?.replace("\\t", "\t")?.replace("\\\"", "\"") ?: ""
+                      showCodeSheet("Page Source", html)
+                  }
+              }
+
+              private fun showCodeSheet(title: String, code: String) {
+                  val d = Dialog(this, android.R.style.Theme_NoTitleBar_Fullscreen)
+                  val overlay = FrameLayout(this).apply {
+                      setBackgroundColor(Color.parseColor("#80000000"))
+                      setOnClickListener { d.dismiss() }
+                  }
+                  val sheet = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      background = liquidGlass(28f)
+                      setPadding(dp(16f), dp(16f), dp(16f), dp(20f))
+                      elevation = dp(20f).toFloat()
+                      setOnClickListener {}
                   }
 
                   val hdr = LinearLayout(this).apply {
                       orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
                   }
                   hdr.addView(TextView(this).apply {
-                      text = title; setTextColor(textColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                      text = title; setTextColor(C_TEXT); setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+                      typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
                   }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                  hdr.addView(iconBtn(Icon.DOWNLOAD, accent, 20).apply {
+                  hdr.addView(iconView(Ic.DOWNLOAD, 20, C_ACCENT, 8, true).apply {
                       setOnClickListener { saveFile("source.html", code); d.dismiss() }
-                  }, LinearLayout.LayoutParams(dp(40f), dp(40f)))
-                  hdr.addView(iconBtn(Icon.CLOSE, textSub, 18).apply {
+                  }, LinearLayout.LayoutParams(dp(38f), dp(38f)))
+                  hdr.addView(iconView(Ic.CLOSE, 18, C_TEXT3, 8).apply {
                       setOnClickListener { d.dismiss() }
-                  }, LinearLayout.LayoutParams(dp(40f), dp(40f)))
+                  }, LinearLayout.LayoutParams(dp(38f), dp(38f)))
                   sheet.addView(hdr)
 
-                  val sv = ScrollView(this)
-                  sv.addView(HorizontalScrollView(this).apply {
-                      addView(TextView(this@MainActivity).apply {
-                          text = code; setTextColor(Color.parseColor("#E2E8F0"))
-                          setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-                          typeface = Typeface.MONOSPACE
-                          setBackgroundColor(Color.parseColor("#0D1117"))
-                          setPadding(dp(12f), dp(12f), dp(12f), dp(12f))
-                          setTextIsSelectable(true)
-                      })
+                  sheet.addView(TextView(this).apply {
+                      text = "${code.lines().size} lines · ${code.length} chars"
+                      setTextColor(C_TEXT3); setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                      setPadding(0, dp(4f), 0, dp(10f))
                   })
+
+                  val sv = ScrollView(this)
+                  val hsv = HorizontalScrollView(this)
+                  hsv.addView(TextView(this).apply {
+                      text = code; setTextColor(Color.parseColor("#E2E8F0"))
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                      typeface = Typeface.MONOSPACE
+                      setBackgroundColor(Color.parseColor("#0D1117"))
+                      setPadding(dp(12f), dp(12f), dp(12f), dp(12f))
+                      setTextIsSelectable(true)
+                  })
+                  sv.addView(hsv)
                   sheet.addView(sv, LinearLayout.LayoutParams(
                       LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
                   ))
 
-                  root2.addView(sheet, FrameLayout.LayoutParams(
-                      FrameLayout.LayoutParams.MATCH_PARENT,
-                      (resources.displayMetrics.heightPixels * 0.85).toInt(), Gravity.BOTTOM
-                  ).apply { setMargins(dp(8f), 0, dp(8f), dp(16f)) })
+                  val h = (resources.displayMetrics.heightPixels * 0.86).toInt()
+                  overlay.addView(sheet, FrameLayout.LayoutParams(
+                      FrameLayout.LayoutParams.MATCH_PARENT, h, Gravity.BOTTOM
+                  ).apply { setMargins(dp(6f), 0, dp(6f), 0) })
 
-                  d.setContentView(root2); d.show()
-                  sheet.translationY = 1000f
-                  sheet.animate().translationY(0f).setDuration(350)
+                  d.setContentView(overlay); d.show()
+                  sheet.translationY = h.toFloat()
+                  sheet.animate().translationY(0f).setDuration(380)
                       .setInterpolator(DecelerateInterpolator(2.5f)).start()
               }
 
-              // ── Files ──────────────────────────────────────────────────
-
+              // ══════════════════════════════════════════════════════════
+              //  FILES
+              // ══════════════════════════════════════════════════════════
               private fun showFiles() {
                   webView.evaluateJavascript("""
                       (function(){
                           return JSON.stringify({
-                              scripts: Array.from(document.querySelectorAll('script[src]')).map(s=>s.src),
-                              styles:  Array.from(document.querySelectorAll('link[rel=stylesheet]')).map(l=>l.href),
-                              images:  Array.from(document.querySelectorAll('img[src]')).map(i=>i.src)
+                              js: Array.from(document.querySelectorAll('script[src]')).map(s=>s.src),
+                              css: Array.from(document.querySelectorAll('link[rel=stylesheet]')).map(l=>l.href),
+                              img: Array.from(document.querySelectorAll('img[src]')).map(i=>i.src),
+                              links: Array.from(document.querySelectorAll('a[href]'))
+                                  .map(a=>a.href).filter(h=>h.startsWith('http')).slice(0,20)
                           });
                       })();
-                  """.trimIndent()) { result ->
-                      val clean = result?.removeSurrounding("\"")?.replace("\\\"", "\"") ?: "{}"
-                      showFilesDialog(clean)
+                  """.trimIndent()) { res ->
+                      val json = res?.removeSurrounding("\"")?.replace("\\\"","\"") ?: "{}"
+                      showFilesSheet(json)
                   }
               }
 
-              private fun showFilesDialog(json: String) {
-                  val d = Dialog(this, android.R.style.Theme_NoTitleBar_Fullscreen)
-                  val root2 = FrameLayout(this)
-                  root2.setBackgroundColor(Color.parseColor("#CC000000"))
-
-                  val sheet = LinearLayout(this).apply {
-                      orientation = LinearLayout.VERTICAL
-                      background = glassDrawable(28f)
-                      setPadding(dp(16f), dp(16f), dp(16f), dp(16f))
+              private fun showFilesSheet(json: String) {
+                  // Parse URLs
+                  val sections = mutableListOf<Pair<String, List<String>>>()
+                  listOf("js" to "Scripts", "css" to "Styles", "img" to "Images").forEach { (key, label) ->
+                      val rx = Regex("\"$key\":\\[([^\\]]*)]")
+                      val m = rx.find(json)
+                      if (m != null) {
+                          val urls = Regex("\"(https?://[^\"]+)\"").findAll(m.groupValues[1])
+                              .map { it.groupValues[1] }.toList()
+                          if (urls.isNotEmpty()) sections.add(label to urls)
+                      }
                   }
 
+                  val allUrls = sections.flatMap { it.second }
+
+                  val d = Dialog(this, android.R.style.Theme_NoTitleBar_Fullscreen)
+                  val overlay = FrameLayout(this).apply {
+                      setBackgroundColor(Color.parseColor("#80000000"))
+                      setOnClickListener { d.dismiss() }
+                  }
+                  val sheet = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      background = liquidGlass(28f)
+                      setPadding(dp(16f), dp(16f), dp(16f), dp(20f))
+                      elevation = dp(20f).toFloat()
+                      setOnClickListener {}
+                  }
+
+                  // Header
                   val hdr = LinearLayout(this).apply {
                       orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
                   }
+                  hdr.addView(ImageView(this).apply {
+                      setImageBitmap(icon(Ic.FOLDER, 20, C_ACCENT))
+                  }, LinearLayout.LayoutParams(dp(24f), dp(24f)).apply { setMargins(0,0,dp(10f),0) })
                   hdr.addView(TextView(this).apply {
-                      text = "Site Files"; setTextColor(textColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+                      text = "Site Files"
+                      setTextColor(C_TEXT); setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+                      typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
                   }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                  hdr.addView(iconBtn(Icon.CLOSE, textSub, 18).apply {
+                  hdr.addView(iconView(Ic.CLOSE, 18, C_TEXT3, 8).apply {
                       setOnClickListener { d.dismiss() }
-                  }, LinearLayout.LayoutParams(dp(40f), dp(40f)))
+                  }, LinearLayout.LayoutParams(dp(38f), dp(38f)))
                   sheet.addView(hdr)
+
+                  sheet.addView(TextView(this).apply {
+                      text = "${allUrls.size} resources found"
+                      setTextColor(C_TEXT3); setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                      setPadding(0, dp(4f), 0, dp(10f))
+                  })
 
                   val sv = ScrollView(this)
                   val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
-                  val urls = mutableListOf<String>()
-                  val patterns = listOf(
-                      Regex("\"(https?://[^\"]+\\.(js|css|png|jpg|gif|svg|woff2?|ttf))\""),
-                      Regex("\"(/[^\"]+\\.(js|css|png|jpg|gif|svg|woff2?|ttf))\"")
-                  )
-                  patterns.forEach { rx ->
-                      rx.findAll(json).forEach { m ->
-                          var u = m.groupValues[1]
-                          if (u.startsWith("/")) {
-                              val base = currentUrl.substringBefore("://") + "://" +
-                                      currentUrl.substringAfter("://").substringBefore("/")
-                              u = base + u
+                  sections.forEach { (label, urls) ->
+                      list.addView(TextView(this).apply {
+                          text = label.uppercase()
+                          setTextColor(C_ACCENT)
+                          setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                          typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                          setPadding(dp(4f), dp(14f), 0, dp(6f))
+                      })
+                      urls.forEach { url ->
+                          val fileIc = when {
+                              url.endsWith(".js")  -> Ic.CODE
+                              url.endsWith(".css") -> Ic.STAR
+                              else -> Ic.DOWNLOAD
                           }
-                          if (!urls.contains(u)) urls.add(u)
-                      }
-                  }
-
-                  urls.forEach { url ->
-                      list.addView(LinearLayout(this).apply {
-                          orientation = LinearLayout.HORIZONTAL
-                          gravity = Gravity.CENTER_VERTICAL
-                          background = ripple(GradientDrawable().apply {
-                              setColor(white10); cornerRadius = dp(10f).toFloat()
+                          val row = LinearLayout(this).apply {
+                              orientation = LinearLayout.HORIZONTAL
+                              gravity = Gravity.CENTER_VERTICAL
+                              background = ripple(object : Drawable() {
+                                  val p = Paint(Paint.ANTI_ALIAS_FLAG)
+                                  override fun draw(c: Canvas) {
+                                      p.color = Color.parseColor("#14FFFFFF")
+                                      c.drawRoundRect(RectF(bounds), dp(10f).toFloat(), dp(10f).toFloat(), p)
+                                  }
+                                  override fun setAlpha(a: Int) {}
+                                  override fun setColorFilter(cf: ColorFilter?) {}
+                                  @Suppress("OVERRIDE_DEPRECATION")
+                                  override fun getOpacity() = PixelFormat.TRANSLUCENT
+                              })
+                              setPadding(dp(10f), dp(10f), dp(10f), dp(10f))
+                              setOnClickListener { showCodeSheet(url.substringAfterLast("/"), url) }
+                          }
+                          row.addView(ImageView(this).apply {
+                              setImageBitmap(icon(fileIc, 16, C_TEXT3))
+                          }, LinearLayout.LayoutParams(dp(20f), dp(20f)).apply {
+                              setMargins(0,0,dp(10f),0)
                           })
-                          setPadding(dp(10f), dp(10f), dp(10f), dp(10f))
-                          addView(ImageView(this@MainActivity).apply {
-                              setImageBitmap(icon(Icon.DOWNLOAD, 16, textSub))
-                          }, LinearLayout.LayoutParams(dp(24f), dp(24f)))
-                          addView(TextView(this@MainActivity).apply {
-                              text = url.substringAfterLast("/").take(45)
-                              setTextColor(textColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                              setPadding(dp(8f), 0, 0, 0)
+                          row.addView(LinearLayout(this).apply {
+                              orientation = LinearLayout.VERTICAL
+                              addView(TextView(this@MainActivity).apply {
+                                  text = url.substringAfterLast("/").take(44)
+                                  setTextColor(C_TEXT2); setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                              })
+                              addView(TextView(this@MainActivity).apply {
+                                  text = url.substringAfter("://").substringBefore("/")
+                                  setTextColor(C_TEXT3); setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                              })
                           }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                          setOnClickListener { showSheet(url.substringAfterLast("/"), url) }
-                      }, LinearLayout.LayoutParams(
-                          LinearLayout.LayoutParams.MATCH_PARENT,
-                          ViewGroup.LayoutParams.WRAP_CONTENT
-                      ).apply { setMargins(0, dp(2f), 0, dp(2f)) })
+
+                          row.addView(ImageView(this).apply {
+                              setImageBitmap(icon(Ic.DOWNLOAD, 14, C_TEXT3))
+                              setOnClickListener { downloadFile(url) }
+                          }, LinearLayout.LayoutParams(dp(20f), dp(20f)))
+
+                          list.addView(row, LinearLayout.LayoutParams(
+                              LinearLayout.LayoutParams.MATCH_PARENT,
+                              ViewGroup.LayoutParams.WRAP_CONTENT
+                          ).apply { setMargins(0, dp(2f), 0, dp(2f)) })
+                      }
                   }
 
                   sv.addView(list)
@@ -818,119 +1526,144 @@ jobs:
                       LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
                   ))
 
+                  // Download ZIP
                   sheet.addView(TextView(this).apply {
-                      text = "Download ZIP"
+                      text = "↓  Download ZIP Archive"
                       gravity = Gravity.CENTER
-                      setTextColor(textColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                      background = ripple(accentDrawable(12f))
-                      setPadding(0, dp(12f), 0, dp(12f))
-                      setOnClickListener { d.dismiss(); downloadZip(urls) }
+                      setTextColor(C_TEXT)
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                      typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                      background = ripple(accentGlass(14f))
+                      setPadding(0, 0, 0, 0)
+                      setOnClickListener { d.dismiss(); downloadZip(allUrls) }
                   }, LinearLayout.LayoutParams(
-                      LinearLayout.LayoutParams.MATCH_PARENT, dp(48f)
-                  ).apply { setMargins(0, dp(12f), 0, 0) })
+                      LinearLayout.LayoutParams.MATCH_PARENT, dp(50f)
+                  ).apply { setMargins(0, dp(14f), 0, 0) })
 
-                  root2.addView(sheet, FrameLayout.LayoutParams(
-                      FrameLayout.LayoutParams.MATCH_PARENT,
-                      (resources.displayMetrics.heightPixels * 0.85).toInt(), Gravity.BOTTOM
-                  ).apply { setMargins(dp(8f), 0, dp(8f), dp(16f)) })
+                  val h = (resources.displayMetrics.heightPixels * 0.86).toInt()
+                  overlay.addView(sheet, FrameLayout.LayoutParams(
+                      FrameLayout.LayoutParams.MATCH_PARENT, h, Gravity.BOTTOM
+                  ).apply { setMargins(dp(6f), 0, dp(6f), 0) })
 
-                  d.setContentView(root2); d.show()
-                  sheet.translationY = 1000f
-                  sheet.animate().translationY(0f).setDuration(350)
+                  d.setContentView(overlay); d.show()
+                  sheet.translationY = h.toFloat()
+                  sheet.animate().translationY(0f).setDuration(380)
                       .setInterpolator(DecelerateInterpolator(2.5f)).start()
               }
 
+              // ══════════════════════════════════════════════════════════
+              //  DOWNLOAD
+              // ══════════════════════════════════════════════════════════
+              private fun downloadFile(url: String) {
+                  toast("Downloading…")
+                  scope.launch(Dispatchers.IO) {
+                      try {
+                          val conn = URL(url).openConnection() as HttpURLConnection
+                          conn.connectTimeout = 8000; conn.readTimeout = 8000; conn.connect()
+                          if (conn.responseCode == 200) {
+                              val name = url.substringAfterLast("/").take(80).ifEmpty { "file" }
+                              val f = File(getExternalFilesDir(null) ?: filesDir, name)
+                              f.outputStream().use { conn.inputStream.copyTo(it) }
+                              withContext(Dispatchers.Main) { toast("Saved: ${f.name}") }
+                          }
+                      } catch (e: Exception) {
+                          withContext(Dispatchers.Main) { toast("Error: ${e.message}") }
+                      }
+                  }
+              }
+
               private fun downloadZip(urls: List<String>) {
-                  Toast.makeText(this, "Downloading ${urls.size} files…", Toast.LENGTH_SHORT).show()
+                  if (urls.isEmpty()) { toast("No files found"); return }
+                  toast("Building ZIP for ${urls.size} files…")
                   scope.launch(Dispatchers.IO) {
                       try {
                           val dir = getExternalFilesDir(null) ?: filesDir
                           val zip = File(dir, "site_${System.currentTimeMillis()}.zip")
                           ZipOutputStream(BufferedOutputStream(FileOutputStream(zip))).use { zos ->
-                              urls.take(50).forEach { url ->
+                              urls.take(60).forEach { url ->
                                   try {
                                       val conn = URL(url).openConnection() as HttpURLConnection
                                       conn.connectTimeout = 5000; conn.readTimeout = 5000; conn.connect()
                                       if (conn.responseCode == 200) {
-                                          zos.putNextEntry(ZipEntry(url.substringAfterLast("/").take(80)))
+                                          val name = url.substringAfterLast("/").take(80).ifEmpty { "file" }
+                                          zos.putNextEntry(ZipEntry(name))
                                           conn.inputStream.copyTo(zos); zos.closeEntry()
                                       }
                                   } catch (_: Exception) {}
                               }
                           }
-                          withContext(Dispatchers.Main) {
-                              Toast.makeText(this@MainActivity, "Saved: ${zip.absolutePath}", Toast.LENGTH_LONG).show()
-                          }
+                          withContext(Dispatchers.Main) { toast("ZIP saved: ${zip.name}") }
                       } catch (e: Exception) {
-                          withContext(Dispatchers.Main) {
-                              Toast.makeText(this@MainActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                          }
+                          withContext(Dispatchers.Main) { toast("Error: ${e.message}") }
                       }
                   }
               }
 
-              // ── JS ─────────────────────────────────────────────────────
-
-              private fun inspectorJS() = """
+              // ══════════════════════════════════════════════════════════
+              //  JS INSPECTOR
+              // ══════════════════════════════════════════════════════════
+              private fun jsInspector() = """
                   (function(){
-                      var style = document.createElement('style');
-                      style.textContent = '.wi-hi{outline:2px solid #6C63FF!important;background:rgba(108,99,255,0.08)!important}';
-                      document.head.appendChild(style);
-                      window.__wiSel = null;
-                      var over = function(e){
+                      var s=document.createElement('style');
+                      s.id='__wiStyle';
+                      s.textContent='.wi-hi{outline:2px solid #6C63FF!important;outline-offset:2px!important;background:rgba(108,99,255,0.07)!important;transition:outline .12s!important}';
+                      document.head.appendChild(s);
+                      window.__wiSel=null;
+                      var ov=function(e){
                           document.querySelectorAll('.wi-hi').forEach(function(el){el.classList.remove('wi-hi');});
                           e.target.classList.add('wi-hi');
                       };
-                      var click = function(e){
-                          e.preventDefault(); e.stopPropagation();
-                          window.__wiSel = e.target;
-                          var el=e.target, tag=el.tagName.toLowerCase(), id=el.id||'';
-                          var html=el.outerHTML.substring(0,2000);
+                      var cl=function(e){
+                          e.preventDefault();e.stopPropagation();
+                          window.__wiSel=e.target;
+                          var el=e.target,tag=el.tagName.toLowerCase(),id=el.id||'';
+                          var html=el.outerHTML.substring(0,2500);
                           var cs=window.getComputedStyle(el);
-                          var css=['display','position','width','height','color','background','font-size','border']
-                              .map(function(p){return p+':'+cs.getPropertyValue(p)+';'}).join('\n');
+                          var props=['display','position','width','height','max-width','margin',
+                              'padding','color','background-color','font-size','font-weight',
+                              'font-family','border','border-radius','opacity','z-index',
+                              'flex','transform','box-shadow','overflow'];
+                          var css=props.map(function(p){return p+': '+cs.getPropertyValue(p)+';'}).join('\n');
                           window.WebInspector.onElement(tag,id,
                               encodeURIComponent(html),encodeURIComponent(css));
                       };
-                      document.addEventListener('mouseover',over,true);
-                      document.addEventListener('click',click,true);
-                      window.__wiClean = function(){
-                          document.removeEventListener('mouseover',over,true);
-                          document.removeEventListener('click',click,true);
+                      document.addEventListener('mouseover',ov,true);
+                      document.addEventListener('click',cl,true);
+                      window.__wiClean=function(){
+                          document.removeEventListener('mouseover',ov,true);
+                          document.removeEventListener('click',cl,true);
                           document.querySelectorAll('.wi-hi').forEach(function(el){el.classList.remove('wi-hi');});
+                          var st=document.getElementById('__wiStyle');
+                          if(st)st.remove();
                       };
                   })();
               """.trimIndent()
 
               // ── Bridge ─────────────────────────────────────────────────
-
               inner class Bridge {
                   @JavascriptInterface
                   fun onElement(tag: String, id: String, htmlEnc: String, cssEnc: String) {
-                      val html = try { java.net.URLDecoder.decode(htmlEnc, "UTF-8") } catch(e: Exception) { htmlEnc }
-                      val css  = try { java.net.URLDecoder.decode(cssEnc,  "UTF-8") } catch(e: Exception) { cssEnc }
+                      val html = try { java.net.URLDecoder.decode(htmlEnc,"UTF-8") } catch(e:Exception){htmlEnc}
+                      val css  = try { java.net.URLDecoder.decode(cssEnc,"UTF-8")  } catch(e:Exception){cssEnc}
                       runOnUiThread { showElement(tag, id, html, css) }
                   }
               }
 
               // ── Helpers ────────────────────────────────────────────────
-
               private fun saveFile(name: String, content: String) {
                   try {
-                      val f = File(getExternalFilesDir(null) ?: filesDir, name)
-                      f.writeText(content)
-                      Toast.makeText(this, "Saved: ${f.absolutePath}", Toast.LENGTH_LONG).show()
-                  } catch (e: Exception) {
-                      Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                  }
+                      File(getExternalFilesDir(null) ?: filesDir, name).writeText(content)
+                      toast("Saved!")
+                  } catch (e: Exception) { toast("Error: ${e.message}") }
               }
 
-              override fun onBackPressed() {
-                  when {
-                      inspectorMode -> toggleInspector()
-                      webView.canGoBack() -> webView.goBack()
-                      else -> super.onBackPressed()
-                  }
+              private fun toast(msg: String) =
+                  Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+
+              override fun onBackPressed() = when {
+                  inspectorMode -> toggleInspector()
+                  webView.canGoBack() -> webView.goBack()
+                  else -> super.onBackPressed()
               }
 
               override fun onDestroy() {
@@ -962,7 +1695,7 @@ jobs:
           yes | sdkmanager --licenses || true
           sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Create local.properties
+      - name: local.properties
         run: echo "sdk.dir=$HOME/android-sdk" > local.properties
 
       - name: Build APK
