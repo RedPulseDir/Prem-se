@@ -22,36 +22,130 @@ jobs:
           unzip -q /tmp/gradle.zip -d /opt/gradle
           echo "/opt/gradle/gradle-8.4/bin" >> $GITHUB_PATH
 
+      - name: Create gradle.properties
+        run: |
+          cat > gradle.properties << 'EOF'
+          android.useAndroidX=true
+          android.enableJetifier=true
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          org.gradle.parallel=true
+          org.gradle.caching=true
+          org.gradle.daemon=false
+          kotlin.code.style=official
+          EOF
+
       - name: Generate Gradle Wrapper
         run: |
           gradle wrapper --gradle-version 8.4 --distribution-type bin
           chmod +x gradlew
 
-      - name: Verify wrapper jar exists
-        run: ls -la gradle/wrapper/
-
       - name: Setup Android SDK
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y wget unzip
           mkdir -p $HOME/android-sdk/cmdline-tools
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
             -O /tmp/cmdtools.zip
           unzip -q /tmp/cmdtools.zip -d $HOME/android-sdk/cmdline-tools
           mv $HOME/android-sdk/cmdline-tools/cmdline-tools \
              $HOME/android-sdk/cmdline-tools/latest
-          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$HOME/android-sdk"        >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk"    >> $GITHUB_ENV
           echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
+          echo "$HOME/android-sdk/platform-tools"           >> $GITHUB_PATH
 
-      - name: Accept licenses & install SDK packages
+      - name: Accept licenses & install SDK
         run: |
-          yes | sdkmanager --licenses
-          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          yes | sdkmanager --licenses || true
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0"
 
       - name: Create local.properties
         run: echo "sdk.dir=$HOME/android-sdk" > local.properties
+
+      - name: Fix app/build.gradle
+        run: |
+          cat > app/build.gradle << 'EOF'
+          plugins {
+              id 'com.android.application'
+              id 'kotlin-android'
+          }
+
+          android {
+              namespace 'com.webinspector.app'
+              compileSdk 34
+
+              defaultConfig {
+                  applicationId "com.webinspector.app"
+                  minSdk 26
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+
+              buildTypes {
+                  debug {
+                      minifyEnabled false
+                      debuggable true
+                  }
+              }
+
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatability JavaVersion.VERSION_17
+              }
+
+              kotlinOptions {
+                  jvmTarget = '17'
+              }
+
+              packagingOptions {
+                  resources {
+                      excludes += ['/META-INF/{AL2.0,LGPL2.1}']
+                  }
+              }
+          }
+
+          dependencies {
+              implementation 'androidx.core:core-ktx:1.12.0'
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'com.google.android.material:material:1.11.0'
+              implementation 'androidx.webkit:webkit:1.9.0'
+              implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+          }
+          EOF
+
+      - name: Fix build.gradle (root)
+        run: |
+          cat > build.gradle << 'EOF'
+          plugins {
+              id 'com.android.application' version '8.2.2' apply false
+              id 'org.jetbrains.kotlin.android' version '1.9.22' apply false
+          }
+          EOF
+
+      - name: Fix settings.gradle
+        run: |
+          cat > settings.gradle << 'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+
+          rootProject.name = "WebInspector"
+          include ':app'
+          EOF
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace --no-daemon
@@ -61,3 +155,9 @@ jobs:
         with:
           name: WebInspector-APK
           path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Show build info
+        if: success()
+        run: |
+          echo "✅ Build successful!"
+          ls -lh app/build/outputs/apk/debug/
