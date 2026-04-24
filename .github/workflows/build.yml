@@ -22,17 +22,922 @@ jobs:
           unzip -q /tmp/gradle.zip -d /opt/gradle
           echo "/opt/gradle/gradle-8.4/bin" >> $GITHUB_PATH
 
-      - name: Create gradle.properties
+      - name: Create all project files
         run: |
+
+          # ── gradle.properties ──────────────────────────────────────────
           cat > gradle.properties << 'EOF'
           android.useAndroidX=true
           android.enableJetifier=true
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-          org.gradle.parallel=true
-          org.gradle.caching=true
           org.gradle.daemon=false
           kotlin.code.style=official
           EOF
+
+          # ── settings.gradle ────────────────────────────────────────────
+          cat > settings.gradle << 'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "WebInspector"
+          include ':app'
+          EOF
+
+          # ── build.gradle (root) ────────────────────────────────────────
+          cat > build.gradle << 'EOF'
+          plugins {
+              id 'com.android.application' version '8.2.2' apply false
+              id 'org.jetbrains.kotlin.android' version '1.9.22' apply false
+          }
+          EOF
+
+          # ── app/build.gradle ───────────────────────────────────────────
+          cat > app/build.gradle << 'EOF'
+          plugins {
+              id 'com.android.application'
+              id 'kotlin-android'
+          }
+          android {
+              namespace 'com.webinspector.app'
+              compileSdk 34
+              defaultConfig {
+                  applicationId "com.webinspector.app"
+                  minSdk 26
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+              buildTypes {
+                  debug { minifyEnabled false }
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+              kotlinOptions { jvmTarget = '17' }
+          }
+          dependencies {
+              implementation 'androidx.core:core-ktx:1.12.0'
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'com.google.android.material:material:1.11.0'
+              implementation 'androidx.webkit:webkit:1.9.0'
+          }
+          EOF
+
+          # ── AndroidManifest.xml ────────────────────────────────────────
+          mkdir -p app/src/main
+          cat > app/src/main/AndroidManifest.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET"/>
+              <application
+                  android:allowBackup="true"
+                  android:label="WebInspector"
+                  android:theme="@style/Theme.WebInspector"
+                  android:usesCleartextTraffic="true"
+                  android:hardwareAccelerated="true">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:windowSoftInputMode="adjustResize"
+                      android:configChanges="orientation|screenSize|keyboardHidden">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          # ── themes.xml ─────────────────────────────────────────────────
+          mkdir -p app/src/main/res/values
+          cat > app/src/main/res/values/themes.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Theme.WebInspector" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+                  <item name="colorPrimary">#6C63FF</item>
+                  <item name="colorPrimaryVariant">#4A42CC</item>
+                  <item name="colorOnPrimary">#FFFFFF</item>
+                  <item name="android:windowBackground">#0A0A0F</item>
+                  <item name="android:statusBarColor">#00000000</item>
+                  <item name="android:navigationBarColor">#00000000</item>
+                  <item name="android:windowLightStatusBar">false</item>
+              </style>
+          </resources>
+          EOF
+
+          # ── MainActivity.kt ────────────────────────────────────────────
+          mkdir -p app/src/main/java/com/webinspector/app
+          cat > app/src/main/java/com/webinspector/app/MainActivity.kt << 'KOTLIN'
+          package com.webinspector.app
+
+          import android.annotation.SuppressLint
+          import android.app.Dialog
+          import android.content.Context
+          import android.graphics.*
+          import android.graphics.drawable.*
+          import android.os.*
+          import android.util.TypedValue
+          import android.view.*
+          import android.view.animation.DecelerateInterpolator
+          import android.view.inputmethod.EditorInfo
+          import android.view.inputmethod.InputMethodManager
+          import android.webkit.*
+          import android.widget.*
+          import androidx.appcompat.app.AppCompatActivity
+          import androidx.core.view.WindowCompat
+          import kotlinx.coroutines.*
+          import java.io.*
+          import java.net.HttpURLConnection
+          import java.net.URL
+          import java.util.zip.ZipEntry
+          import java.util.zip.ZipOutputStream
+
+          class MainActivity : AppCompatActivity() {
+
+              private lateinit var webView: WebView
+              private lateinit var root: FrameLayout
+              private lateinit var urlBar: EditText
+              private lateinit var inspectorBanner: LinearLayout
+              private lateinit var inspectedPanel: LinearLayout
+              private var inspectorMode = false
+              private var currentUrl = ""
+              private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+              private fun dp(v: Float) = TypedValue.applyDimension(
+                  TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics
+              ).toInt()
+
+              private val bg          = Color.parseColor("#0A0A0F")
+              private val glass       = Color.parseColor("#1C1C2E")
+              private val glassBorder = Color.parseColor("#2C2C3E")
+              private val accent      = Color.parseColor("#6C63FF")
+              private val accentDark  = Color.parseColor("#4A42CC")
+              private val accentGlow  = Color.parseColor("#3D3A80")
+              private val success     = Color.parseColor("#30D158")
+              private val textColor   = Color.WHITE
+              private val textSub     = Color.parseColor("#8E8EA0")
+              private val white10     = Color.parseColor("#1AFFFFFF")
+              private val white20     = Color.parseColor("#33FFFFFF")
+
+              // ── Drawables ──────────────────────────────────────────────
+
+              private fun glassDrawable(radiusDp: Float = 24f): Drawable {
+                  val r = dp(radiusDp).toFloat()
+                  return object : Drawable() {
+                      val p = Paint(Paint.ANTI_ALIAS_FLAG)
+                      val sp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                          style = Paint.Style.STROKE
+                          strokeWidth = dp(1f).toFloat()
+                          color = glassBorder
+                      }
+                      override fun draw(c: Canvas) {
+                          val rect = RectF(bounds)
+                          p.color = Color.parseColor("#14FFFFFF"); c.drawRoundRect(rect, r, r, p)
+                          p.color = glass;                         c.drawRoundRect(rect, r, r, p)
+                          c.drawRoundRect(rect, r, r, sp)
+                      }
+                      override fun setAlpha(a: Int) {}
+                      override fun setColorFilter(cf: ColorFilter?) {}
+                      @Suppress("OVERRIDE_DEPRECATION")
+                      override fun getOpacity() = PixelFormat.TRANSLUCENT
+                  }
+              }
+
+              private fun accentDrawable(r: Float = 16f) = GradientDrawable(
+                  GradientDrawable.Orientation.TL_BR, intArrayOf(accent, accentDark)
+              ).apply { cornerRadius = dp(r).toFloat() }
+
+              private fun ripple(base: Drawable) = RippleDrawable(
+                  android.content.res.ColorStateList.valueOf(white20), base, null
+              )
+
+              // ── SVG Icons via Canvas ────────────────────────────────────
+
+              enum class Icon { BACK, FORWARD, REFRESH, INSPECT, CODE, FOLDER, DOWNLOAD, CLOSE, SEARCH }
+
+              private fun icon(type: Icon, sizeDp: Int = 22, color: Int = textColor): Bitmap {
+                  val s = dp(sizeDp.toFloat())
+                  val bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+                  val cv = Canvas(bmp)
+                  val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                      this.color = color; style = Paint.Style.STROKE
+                      strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
+                      strokeWidth = s * 0.08f
+                  }
+                  val f = s / 24f
+                  fun x(v: Float) = v * f
+                  fun y(v: Float) = v * f
+                  when (type) {
+                      Icon.BACK    -> cv.drawPath(Path().apply { moveTo(x(15f),y(5f)); lineTo(x(8f),y(12f)); lineTo(x(15f),y(19f)) }, p)
+                      Icon.FORWARD -> cv.drawPath(Path().apply { moveTo(x(9f),y(5f)); lineTo(x(16f),y(12f)); lineTo(x(9f),y(19f)) }, p)
+                      Icon.REFRESH -> {
+                          cv.drawArc(RectF(x(3f),y(3f),x(19f),y(19f)), -90f, 270f, false, p)
+                          cv.drawLine(x(12f),y(2f),x(12f),y(5f),p)
+                      }
+                      Icon.INSPECT -> {
+                          cv.drawCircle(x(12f),y(12f),x(6f),p)
+                          cv.drawLine(x(12f),y(2f),x(12f),y(7f),p)
+                          cv.drawLine(x(12f),y(17f),x(12f),y(22f),p)
+                          cv.drawLine(x(2f),y(12f),x(7f),y(12f),p)
+                          cv.drawLine(x(17f),y(12f),x(22f),y(12f),p)
+                          val fp = Paint(p).apply { style = Paint.Style.FILL }
+                          cv.drawCircle(x(12f),y(12f),x(2f),fp)
+                      }
+                      Icon.CODE    -> cv.drawPath(Path().apply {
+                          moveTo(x(8f),y(6f)); lineTo(x(2f),y(12f)); lineTo(x(8f),y(18f))
+                          moveTo(x(16f),y(6f)); lineTo(x(22f),y(12f)); lineTo(x(16f),y(18f))
+                      }, p)
+                      Icon.FOLDER  -> cv.drawPath(Path().apply {
+                          moveTo(x(2f),y(7f)); lineTo(x(2f),y(19f)); lineTo(x(22f),y(19f))
+                          lineTo(x(22f),y(9f)); lineTo(x(11f),y(9f)); lineTo(x(9f),y(7f)); close()
+                      }, p)
+                      Icon.DOWNLOAD -> {
+                          cv.drawLine(x(12f),y(3f),x(12f),y(15f),p)
+                          cv.drawPath(Path().apply { moveTo(x(7f),y(10f)); lineTo(x(12f),y(15f)); lineTo(x(17f),y(10f)) }, p)
+                          cv.drawLine(x(3f),y(19f),x(21f),y(19f),p)
+                      }
+                      Icon.CLOSE  -> { cv.drawLine(x(5f),y(5f),x(19f),y(19f),p); cv.drawLine(x(19f),y(5f),x(5f),y(19f),p) }
+                      Icon.SEARCH -> { cv.drawCircle(x(10f),y(10f),x(6f),p); cv.drawLine(x(15f),y(15f),x(21f),y(21f),p) }
+                  }
+                  return bmp
+              }
+
+              private fun iconBtn(type: Icon, color: Int = textColor, sizeDp: Int = 22, pad: Int = 10): ImageView {
+                  return ImageView(this).apply {
+                      setImageBitmap(icon(type, sizeDp, color))
+                      scaleType = ImageView.ScaleType.CENTER_INSIDE
+                      val p = dp(pad.toFloat())
+                      setPadding(p, p, p, p)
+                      background = ripple(ColorDrawable(Color.TRANSPARENT))
+                  }
+              }
+
+              // ── onCreate ───────────────────────────────────────────────
+
+              @SuppressLint("SetJavaScriptEnabled")
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  WindowCompat.setDecorFitsSystemWindows(window, false)
+                  window.statusBarColor = Color.TRANSPARENT
+                  window.navigationBarColor = Color.TRANSPARENT
+
+                  root = FrameLayout(this)
+                  root.setBackgroundColor(bg)
+                  setContentView(root)
+
+                  setupWebView()
+                  setupTopBar()
+                  setupBottomBar()
+                  setupInspectorOverlay()
+
+                  webView.loadUrl("https://google.com")
+              }
+
+              // ── WebView ────────────────────────────────────────────────
+
+              @SuppressLint("SetJavaScriptEnabled")
+              private fun setupWebView() {
+                  webView = WebView(this).apply {
+                      layoutParams = FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.MATCH_PARENT,
+                          FrameLayout.LayoutParams.MATCH_PARENT
+                      )
+                      settings.apply {
+                          javaScriptEnabled = true
+                          domStorageEnabled = true
+                          loadWithOverviewMode = true
+                          useWideViewPort = true
+                          builtInZoomControls = true
+                          displayZoomControls = false
+                          mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                      }
+                      addJavascriptInterface(Bridge(), "WebInspector")
+                      webViewClient = object : WebViewClient() {
+                          override fun onPageFinished(view: WebView, url: String) {
+                              currentUrl = url
+                              urlBar.setText(url)
+                          }
+                      }
+                  }
+                  root.addView(webView)
+              }
+
+              // ── Top Bar ────────────────────────────────────────────────
+
+              private fun setupTopBar() {
+                  val grad = View(this).apply {
+                      layoutParams = FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.MATCH_PARENT, dp(130f), Gravity.TOP
+                      )
+                      background = GradientDrawable(
+                          GradientDrawable.Orientation.TOP_BOTTOM,
+                          intArrayOf(Color.parseColor("#EE000000"), Color.TRANSPARENT)
+                      )
+                  }
+                  root.addView(grad)
+
+                  val container = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER_VERTICAL
+                      layoutParams = FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.MATCH_PARENT,
+                          FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP
+                      )
+                      setPadding(dp(12f), dp(52f), dp(12f), dp(8f))
+                  }
+
+                  val pill = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER_VERTICAL
+                      background = glassDrawable(32f)
+                      setPadding(dp(4f), dp(4f), dp(4f), dp(4f))
+                  }
+
+                  val back = iconBtn(Icon.BACK).apply {
+                      setOnClickListener { if (webView.canGoBack()) webView.goBack() }
+                  }
+                  val fwd = iconBtn(Icon.FORWARD).apply {
+                      setOnClickListener { if (webView.canGoForward()) webView.goForward() }
+                  }
+                  val ref = iconBtn(Icon.REFRESH).apply {
+                      setOnClickListener { webView.reload() }
+                  }
+
+                  urlBar = EditText(this).apply {
+                      background = null
+                      setTextColor(textColor)
+                      setHintTextColor(textSub)
+                      hint = "Search or enter URL"
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                      maxLines = 1
+                      imeOptions = EditorInfo.IME_ACTION_GO
+                      inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                              android.text.InputType.TYPE_TEXT_VARIATION_URI
+                      setOnEditorActionListener { _, actionId, _ ->
+                          if (actionId == EditorInfo.IME_ACTION_GO) { navigate(); true } else false
+                      }
+                  }
+
+                  pill.addView(back, LinearLayout.LayoutParams(dp(40f), dp(40f)))
+                  pill.addView(fwd,  LinearLayout.LayoutParams(dp(40f), dp(40f)))
+                  pill.addView(urlBar, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                  pill.addView(ref,  LinearLayout.LayoutParams(dp(40f), dp(40f)))
+
+                  container.addView(pill, LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT,
+                      dp(52f)
+                  ))
+                  root.addView(container)
+              }
+
+              private fun navigate() {
+                  var url = urlBar.text.toString().trim()
+                  if (url.isEmpty()) return
+                  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                      url = if (url.contains(".") && !url.contains(" ")) "https://$url"
+                      else "https://www.google.com/search?q=${url.replace(" ", "+")}"
+                  }
+                  webView.loadUrl(url)
+                  (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                      .hideSoftInputFromWindow(urlBar.windowToken, 0)
+                  urlBar.clearFocus()
+              }
+
+              // ── Bottom Bar ─────────────────────────────────────────────
+
+              private fun setupBottomBar() {
+                  val grad = View(this).apply {
+                      layoutParams = FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.MATCH_PARENT, dp(130f), Gravity.BOTTOM
+                      )
+                      background = GradientDrawable(
+                          GradientDrawable.Orientation.BOTTOM_TOP,
+                          intArrayOf(Color.parseColor("#EE000000"), Color.TRANSPARENT)
+                      )
+                  }
+                  root.addView(grad)
+
+                  val bar = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER
+                      layoutParams = FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.MATCH_PARENT,
+                          FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM
+                      )
+                      setPadding(dp(16f), dp(8f), dp(16f), dp(36f))
+                  }
+
+                  val pill = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER
+                      background = glassDrawable(28f)
+                      setPadding(dp(8f), dp(8f), dp(8f), dp(8f))
+                  }
+
+                  pill.addView(toolBtn("Inspect", Icon.INSPECT, true)  { toggleInspector() })
+                  pill.addView(toolBtn("Source",  Icon.CODE)            { showSource() })
+                  pill.addView(toolBtn("Files",   Icon.FOLDER)          { showFiles() })
+
+                  bar.addView(pill)
+                  root.addView(bar)
+              }
+
+              private fun toolBtn(label: String, icon: Icon, accented: Boolean = false, action: () -> Unit): LinearLayout {
+                  return LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      gravity = Gravity.CENTER
+                      setPadding(dp(4f), dp(4f), dp(4f), dp(4f))
+                      background = ripple(if (accented) accentDrawable(14f) else glassDrawable(14f))
+                      setOnClickListener { action() }
+                      addView(ImageView(this@MainActivity).apply {
+                          setImageBitmap(icon(icon, 20, textColor))
+                          scaleType = ImageView.ScaleType.CENTER_INSIDE
+                      }, LinearLayout.LayoutParams(dp(28f), dp(28f)))
+                      addView(TextView(this@MainActivity).apply {
+                          text = label
+                          setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f)
+                          setTextColor(if (accented) textColor else textSub)
+                          gravity = Gravity.CENTER
+                      }, LinearLayout.LayoutParams(dp(60f), ViewGroup.LayoutParams.WRAP_CONTENT))
+                      layoutParams = LinearLayout.LayoutParams(dp(68f), dp(64f)).apply {
+                          setMargins(dp(4f), 0, dp(4f), 0)
+                      }
+                  }
+              }
+
+              // ── Inspector Overlay ──────────────────────────────────────
+
+              private fun setupInspectorOverlay() {
+                  inspectorBanner = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER_VERTICAL
+                      background = GradientDrawable().apply {
+                          setColor(Color.parseColor("#CC6C63FF"))
+                          cornerRadius = dp(20f).toFloat()
+                      }
+                      setPadding(dp(16f), dp(10f), dp(10f), dp(10f))
+                      visibility = View.GONE
+                      elevation = dp(8f).toFloat()
+                  }
+
+                  val txt = TextView(this).apply {
+                      text = "Tap any element to inspect"
+                      setTextColor(textColor)
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                  }
+                  inspectorBanner.addView(txt, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                  inspectorBanner.addView(iconBtn(Icon.CLOSE, textColor, 18).apply {
+                      setOnClickListener { toggleInspector() }
+                  }, LinearLayout.LayoutParams(dp(36f), dp(36f)))
+
+                  root.addView(inspectorBanner, FrameLayout.LayoutParams(
+                      FrameLayout.LayoutParams.MATCH_PARENT,
+                      ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP
+                  ).apply { setMargins(dp(16f), dp(108f), dp(16f), 0) })
+
+                  inspectedPanel = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      background = glassDrawable(24f)
+                      setPadding(dp(16f), dp(16f), dp(16f), dp(16f))
+                      visibility = View.GONE
+                      elevation = dp(12f).toFloat()
+                  }
+                  root.addView(inspectedPanel, FrameLayout.LayoutParams(
+                      FrameLayout.LayoutParams.MATCH_PARENT, dp(320f), Gravity.BOTTOM
+                  ).apply { setMargins(dp(8f), 0, dp(8f), dp(96f)) })
+              }
+
+              private fun toggleInspector() {
+                  inspectorMode = !inspectorMode
+                  if (inspectorMode) {
+                      inspectorBanner.visibility = View.VISIBLE
+                      inspectorBanner.alpha = 0f
+                      inspectorBanner.animate().alpha(1f).setDuration(250).start()
+                      webView.evaluateJavascript(inspectorJS(), null)
+                  } else {
+                      inspectorBanner.animate().alpha(0f).setDuration(200).withEndAction {
+                          inspectorBanner.visibility = View.GONE
+                          inspectorBanner.alpha = 1f
+                      }.start()
+                      inspectedPanel.animate().translationY(dp(400f).toFloat()).setDuration(250).withEndAction {
+                          inspectedPanel.visibility = View.GONE
+                          inspectedPanel.translationY = 0f
+                      }.start()
+                      webView.evaluateJavascript("if(window.__wiClean)window.__wiClean();", null)
+                  }
+              }
+
+              private fun showElement(tag: String, id: String, html: String, css: String) {
+                  inspectedPanel.removeAllViews()
+
+                  // Tag badge
+                  val header = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER_VERTICAL
+                  }
+                  header.addView(TextView(this).apply {
+                      text = " <$tag> "
+                      setTextColor(accent)
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                      background = GradientDrawable().apply { setColor(accentGlow); cornerRadius = dp(8f).toFloat() }
+                      setPadding(dp(8f), dp(4f), dp(8f), dp(4f))
+                  })
+                  header.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+                  header.addView(iconBtn(Icon.CLOSE, textSub, 16).apply {
+                      setOnClickListener {
+                          inspectedPanel.animate().translationY(dp(400f).toFloat()).setDuration(250).withEndAction {
+                              inspectedPanel.visibility = View.GONE; inspectedPanel.translationY = 0f
+                          }.start()
+                      }
+                  }, LinearLayout.LayoutParams(dp(32f), dp(32f)))
+                  inspectedPanel.addView(header)
+
+                  // Tabs
+                  val tabs = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      background = GradientDrawable().apply { setColor(white10); cornerRadius = dp(12f).toFloat() }
+                      setPadding(dp(4f), dp(4f), dp(4f), dp(4f))
+                  }
+                  inspectedPanel.addView(tabs, LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT, dp(40f)
+                  ).apply { setMargins(0, dp(12f), 0, dp(8f)) })
+
+                  val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                  val scroll = ScrollView(this)
+                  scroll.addView(content)
+                  inspectedPanel.addView(scroll, LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+                  ))
+
+                  var activeTab = 0
+                  val tabViews = mutableListOf<TextView>()
+
+                  fun showTab(i: Int) {
+                      content.removeAllViews()
+                      when (i) {
+                          0 -> {
+                              val et = EditText(this).apply {
+                                  setText(html)
+                                  setTextColor(Color.parseColor("#E2E8F0"))
+                                  setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                                  background = GradientDrawable().apply { setColor(white10); cornerRadius = dp(12f).toFloat() }
+                                  setPadding(dp(12f), dp(12f), dp(12f), dp(12f))
+                                  typeface = Typeface.MONOSPACE
+                                  gravity = Gravity.TOP; minLines = 4
+                              }
+                              content.addView(et)
+                              content.addView(TextView(this).apply {
+                                  text = "Apply"
+                                  gravity = Gravity.CENTER
+                                  setTextColor(textColor)
+                                  setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                                  background = ripple(accentDrawable(12f))
+                                  setPadding(0, dp(12f), 0, dp(12f))
+                                  setOnClickListener {
+                                      val esc = et.text.toString()
+                                          .replace("\\", "\\\\").replace("'", "\\'")
+                                          .replace("\n", "\\n")
+                                      webView.evaluateJavascript(
+                                          "if(window.__wiSel)window.__wiSel.outerHTML='$esc'", null
+                                      )
+                                  }
+                              }, LinearLayout.LayoutParams(
+                                  LinearLayout.LayoutParams.MATCH_PARENT, dp(44f)
+                              ).apply { setMargins(0, dp(8f), 0, 0) })
+                          }
+                          1 -> content.addView(TextView(this).apply {
+                              text = css
+                              setTextColor(Color.parseColor("#A8DADC"))
+                              setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                              background = GradientDrawable().apply { setColor(white10); cornerRadius = dp(12f).toFloat() }
+                              setPadding(dp(12f), dp(12f), dp(12f), dp(12f))
+                              typeface = Typeface.MONOSPACE
+                          })
+                          2 -> {
+                              val wv = WebView(this).apply {
+                                  settings.javaScriptEnabled = true
+                                  loadDataWithBaseURL(currentUrl,
+                                      "<html><body style='margin:8px;background:#fff'>$html</body></html>",
+                                      "text/html", "UTF-8", null)
+                              }
+                              content.addView(wv, LinearLayout.LayoutParams(
+                                  LinearLayout.LayoutParams.MATCH_PARENT, dp(200f)
+                              ))
+                          }
+                      }
+                  }
+
+                  listOf("HTML", "CSS", "Preview").forEachIndexed { i, name ->
+                      val tv = TextView(this).apply {
+                          text = name
+                          gravity = Gravity.CENTER
+                          setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                          setTextColor(if (i == 0) textColor else textSub)
+                          background = if (i == 0) GradientDrawable().apply {
+                              setColor(accent); cornerRadius = dp(10f).toFloat()
+                          } else null
+                          setPadding(dp(4f), dp(4f), dp(4f), dp(4f))
+                          setOnClickListener {
+                              tabViews[activeTab].setTextColor(textSub); tabViews[activeTab].background = null
+                              activeTab = i; setTextColor(textColor)
+                              background = GradientDrawable().apply { setColor(accent); cornerRadius = dp(10f).toFloat() }
+                              showTab(i)
+                          }
+                      }
+                      tabViews.add(tv)
+                      tabs.addView(tv, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
+                  }
+                  showTab(0)
+
+                  inspectedPanel.visibility = View.VISIBLE
+                  inspectedPanel.translationY = dp(400f).toFloat()
+                  inspectedPanel.animate().translationY(0f).setDuration(350)
+                      .setInterpolator(DecelerateInterpolator(2.5f)).start()
+              }
+
+              // ── Source ─────────────────────────────────────────────────
+
+              private fun showSource() {
+                  webView.evaluateJavascript(
+                      "(function(){return document.documentElement.outerHTML})();"
+                  ) { result ->
+                      val html = result?.removeSurrounding("\"")
+                          ?.replace("\\n", "\n")?.replace("\\t", "\t")?.replace("\\\"", "\"") ?: ""
+                      showSheet("Page Source", html)
+                  }
+              }
+
+              private fun showSheet(title: String, code: String) {
+                  val d = Dialog(this, android.R.style.Theme_NoTitleBar_Fullscreen)
+                  val root2 = FrameLayout(this)
+                  root2.setBackgroundColor(Color.parseColor("#CC000000"))
+
+                  val sheet = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      background = glassDrawable(28f)
+                      setPadding(dp(16f), dp(16f), dp(16f), dp(16f))
+                  }
+
+                  val hdr = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                  }
+                  hdr.addView(TextView(this).apply {
+                      text = title; setTextColor(textColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                  }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                  hdr.addView(iconBtn(Icon.DOWNLOAD, accent, 20).apply {
+                      setOnClickListener { saveFile("source.html", code); d.dismiss() }
+                  }, LinearLayout.LayoutParams(dp(40f), dp(40f)))
+                  hdr.addView(iconBtn(Icon.CLOSE, textSub, 18).apply {
+                      setOnClickListener { d.dismiss() }
+                  }, LinearLayout.LayoutParams(dp(40f), dp(40f)))
+                  sheet.addView(hdr)
+
+                  val sv = ScrollView(this)
+                  sv.addView(HorizontalScrollView(this).apply {
+                      addView(TextView(this@MainActivity).apply {
+                          text = code; setTextColor(Color.parseColor("#E2E8F0"))
+                          setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                          typeface = Typeface.MONOSPACE
+                          setBackgroundColor(Color.parseColor("#0D1117"))
+                          setPadding(dp(12f), dp(12f), dp(12f), dp(12f))
+                          setTextIsSelectable(true)
+                      })
+                  })
+                  sheet.addView(sv, LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+                  ))
+
+                  root2.addView(sheet, FrameLayout.LayoutParams(
+                      FrameLayout.LayoutParams.MATCH_PARENT,
+                      (resources.displayMetrics.heightPixels * 0.85).toInt(), Gravity.BOTTOM
+                  ).apply { setMargins(dp(8f), 0, dp(8f), dp(16f)) })
+
+                  d.setContentView(root2); d.show()
+                  sheet.translationY = 1000f
+                  sheet.animate().translationY(0f).setDuration(350)
+                      .setInterpolator(DecelerateInterpolator(2.5f)).start()
+              }
+
+              // ── Files ──────────────────────────────────────────────────
+
+              private fun showFiles() {
+                  webView.evaluateJavascript("""
+                      (function(){
+                          return JSON.stringify({
+                              scripts: Array.from(document.querySelectorAll('script[src]')).map(s=>s.src),
+                              styles:  Array.from(document.querySelectorAll('link[rel=stylesheet]')).map(l=>l.href),
+                              images:  Array.from(document.querySelectorAll('img[src]')).map(i=>i.src)
+                          });
+                      })();
+                  """.trimIndent()) { result ->
+                      val clean = result?.removeSurrounding("\"")?.replace("\\\"", "\"") ?: "{}"
+                      showFilesDialog(clean)
+                  }
+              }
+
+              private fun showFilesDialog(json: String) {
+                  val d = Dialog(this, android.R.style.Theme_NoTitleBar_Fullscreen)
+                  val root2 = FrameLayout(this)
+                  root2.setBackgroundColor(Color.parseColor("#CC000000"))
+
+                  val sheet = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      background = glassDrawable(28f)
+                      setPadding(dp(16f), dp(16f), dp(16f), dp(16f))
+                  }
+
+                  val hdr = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                  }
+                  hdr.addView(TextView(this).apply {
+                      text = "Site Files"; setTextColor(textColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+                  }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                  hdr.addView(iconBtn(Icon.CLOSE, textSub, 18).apply {
+                      setOnClickListener { d.dismiss() }
+                  }, LinearLayout.LayoutParams(dp(40f), dp(40f)))
+                  sheet.addView(hdr)
+
+                  val sv = ScrollView(this)
+                  val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+                  val urls = mutableListOf<String>()
+                  val patterns = listOf(
+                      Regex("\"(https?://[^\"]+\\.(js|css|png|jpg|gif|svg|woff2?|ttf))\""),
+                      Regex("\"(/[^\"]+\\.(js|css|png|jpg|gif|svg|woff2?|ttf))\"")
+                  )
+                  patterns.forEach { rx ->
+                      rx.findAll(json).forEach { m ->
+                          var u = m.groupValues[1]
+                          if (u.startsWith("/")) {
+                              val base = currentUrl.substringBefore("://") + "://" +
+                                      currentUrl.substringAfter("://").substringBefore("/")
+                              u = base + u
+                          }
+                          if (!urls.contains(u)) urls.add(u)
+                      }
+                  }
+
+                  urls.forEach { url ->
+                      list.addView(LinearLayout(this).apply {
+                          orientation = LinearLayout.HORIZONTAL
+                          gravity = Gravity.CENTER_VERTICAL
+                          background = ripple(GradientDrawable().apply {
+                              setColor(white10); cornerRadius = dp(10f).toFloat()
+                          })
+                          setPadding(dp(10f), dp(10f), dp(10f), dp(10f))
+                          addView(ImageView(this@MainActivity).apply {
+                              setImageBitmap(icon(Icon.DOWNLOAD, 16, textSub))
+                          }, LinearLayout.LayoutParams(dp(24f), dp(24f)))
+                          addView(TextView(this@MainActivity).apply {
+                              text = url.substringAfterLast("/").take(45)
+                              setTextColor(textColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                              setPadding(dp(8f), 0, 0, 0)
+                          }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                          setOnClickListener { showSheet(url.substringAfterLast("/"), url) }
+                      }, LinearLayout.LayoutParams(
+                          LinearLayout.LayoutParams.MATCH_PARENT,
+                          ViewGroup.LayoutParams.WRAP_CONTENT
+                      ).apply { setMargins(0, dp(2f), 0, dp(2f)) })
+                  }
+
+                  sv.addView(list)
+                  sheet.addView(sv, LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+                  ))
+
+                  sheet.addView(TextView(this).apply {
+                      text = "Download ZIP"
+                      gravity = Gravity.CENTER
+                      setTextColor(textColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                      background = ripple(accentDrawable(12f))
+                      setPadding(0, dp(12f), 0, dp(12f))
+                      setOnClickListener { d.dismiss(); downloadZip(urls) }
+                  }, LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT, dp(48f)
+                  ).apply { setMargins(0, dp(12f), 0, 0) })
+
+                  root2.addView(sheet, FrameLayout.LayoutParams(
+                      FrameLayout.LayoutParams.MATCH_PARENT,
+                      (resources.displayMetrics.heightPixels * 0.85).toInt(), Gravity.BOTTOM
+                  ).apply { setMargins(dp(8f), 0, dp(8f), dp(16f)) })
+
+                  d.setContentView(root2); d.show()
+                  sheet.translationY = 1000f
+                  sheet.animate().translationY(0f).setDuration(350)
+                      .setInterpolator(DecelerateInterpolator(2.5f)).start()
+              }
+
+              private fun downloadZip(urls: List<String>) {
+                  Toast.makeText(this, "Downloading ${urls.size} files…", Toast.LENGTH_SHORT).show()
+                  scope.launch(Dispatchers.IO) {
+                      try {
+                          val dir = getExternalFilesDir(null) ?: filesDir
+                          val zip = File(dir, "site_${System.currentTimeMillis()}.zip")
+                          ZipOutputStream(BufferedOutputStream(FileOutputStream(zip))).use { zos ->
+                              urls.take(50).forEach { url ->
+                                  try {
+                                      val conn = URL(url).openConnection() as HttpURLConnection
+                                      conn.connectTimeout = 5000; conn.readTimeout = 5000; conn.connect()
+                                      if (conn.responseCode == 200) {
+                                          zos.putNextEntry(ZipEntry(url.substringAfterLast("/").take(80)))
+                                          conn.inputStream.copyTo(zos); zos.closeEntry()
+                                      }
+                                  } catch (_: Exception) {}
+                              }
+                          }
+                          withContext(Dispatchers.Main) {
+                              Toast.makeText(this@MainActivity, "Saved: ${zip.absolutePath}", Toast.LENGTH_LONG).show()
+                          }
+                      } catch (e: Exception) {
+                          withContext(Dispatchers.Main) {
+                              Toast.makeText(this@MainActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                          }
+                      }
+                  }
+              }
+
+              // ── JS ─────────────────────────────────────────────────────
+
+              private fun inspectorJS() = """
+                  (function(){
+                      var style = document.createElement('style');
+                      style.textContent = '.wi-hi{outline:2px solid #6C63FF!important;background:rgba(108,99,255,0.08)!important}';
+                      document.head.appendChild(style);
+                      window.__wiSel = null;
+                      var over = function(e){
+                          document.querySelectorAll('.wi-hi').forEach(function(el){el.classList.remove('wi-hi');});
+                          e.target.classList.add('wi-hi');
+                      };
+                      var click = function(e){
+                          e.preventDefault(); e.stopPropagation();
+                          window.__wiSel = e.target;
+                          var el=e.target, tag=el.tagName.toLowerCase(), id=el.id||'';
+                          var html=el.outerHTML.substring(0,2000);
+                          var cs=window.getComputedStyle(el);
+                          var css=['display','position','width','height','color','background','font-size','border']
+                              .map(function(p){return p+':'+cs.getPropertyValue(p)+';'}).join('\n');
+                          window.WebInspector.onElement(tag,id,
+                              encodeURIComponent(html),encodeURIComponent(css));
+                      };
+                      document.addEventListener('mouseover',over,true);
+                      document.addEventListener('click',click,true);
+                      window.__wiClean = function(){
+                          document.removeEventListener('mouseover',over,true);
+                          document.removeEventListener('click',click,true);
+                          document.querySelectorAll('.wi-hi').forEach(function(el){el.classList.remove('wi-hi');});
+                      };
+                  })();
+              """.trimIndent()
+
+              // ── Bridge ─────────────────────────────────────────────────
+
+              inner class Bridge {
+                  @JavascriptInterface
+                  fun onElement(tag: String, id: String, htmlEnc: String, cssEnc: String) {
+                      val html = try { java.net.URLDecoder.decode(htmlEnc, "UTF-8") } catch(e: Exception) { htmlEnc }
+                      val css  = try { java.net.URLDecoder.decode(cssEnc,  "UTF-8") } catch(e: Exception) { cssEnc }
+                      runOnUiThread { showElement(tag, id, html, css) }
+                  }
+              }
+
+              // ── Helpers ────────────────────────────────────────────────
+
+              private fun saveFile(name: String, content: String) {
+                  try {
+                      val f = File(getExternalFilesDir(null) ?: filesDir, name)
+                      f.writeText(content)
+                      Toast.makeText(this, "Saved: ${f.absolutePath}", Toast.LENGTH_LONG).show()
+                  } catch (e: Exception) {
+                      Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                  }
+              }
+
+              override fun onBackPressed() {
+                  when {
+                      inspectorMode -> toggleInspector()
+                      webView.canGoBack() -> webView.goBack()
+                      else -> super.onBackPressed()
+                  }
+              }
+
+              override fun onDestroy() {
+                  super.onDestroy(); scope.cancel(); webView.destroy()
+              }
+          }
+          KOTLIN
 
       - name: Generate Gradle Wrapper
         run: |
@@ -47,117 +952,24 @@ jobs:
           unzip -q /tmp/cmdtools.zip -d $HOME/android-sdk/cmdline-tools
           mv $HOME/android-sdk/cmdline-tools/cmdline-tools \
              $HOME/android-sdk/cmdline-tools/latest
-          echo "ANDROID_HOME=$HOME/android-sdk"        >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=$HOME/android-sdk"    >> $GITHUB_ENV
+          echo "ANDROID_HOME=$HOME/android-sdk"             >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk"         >> $GITHUB_ENV
           echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
           echo "$HOME/android-sdk/platform-tools"           >> $GITHUB_PATH
 
       - name: Accept licenses & install SDK
         run: |
           yes | sdkmanager --licenses || true
-          sdkmanager \
-            "platform-tools" \
-            "platforms;android-34" \
-            "build-tools;34.0.0"
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
       - name: Create local.properties
         run: echo "sdk.dir=$HOME/android-sdk" > local.properties
 
-      - name: Fix app/build.gradle
-        run: |
-          cat > app/build.gradle << 'EOF'
-          plugins {
-              id 'com.android.application'
-              id 'kotlin-android'
-          }
-
-          android {
-              namespace 'com.webinspector.app'
-              compileSdk 34
-
-              defaultConfig {
-                  applicationId "com.webinspector.app"
-                  minSdk 26
-                  targetSdk 34
-                  versionCode 1
-                  versionName "1.0"
-              }
-
-              buildTypes {
-                  debug {
-                      minifyEnabled false
-                      debuggable true
-                  }
-              }
-
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
-
-              kotlinOptions {
-                  jvmTarget = '17'
-              }
-
-              packagingOptions {
-                  resources {
-                      excludes += ['/META-INF/{AL2.0,LGPL2.1}']
-                  }
-              }
-          }
-
-          dependencies {
-              implementation 'androidx.core:core-ktx:1.12.0'
-              implementation 'androidx.appcompat:appcompat:1.6.1'
-              implementation 'com.google.android.material:material:1.11.0'
-              implementation 'androidx.webkit:webkit:1.9.0'
-              implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-          }
-          EOF
-
-      - name: Fix build.gradle (root)
-        run: |
-          cat > build.gradle << 'EOF'
-          plugins {
-              id 'com.android.application' version '8.2.2' apply false
-              id 'org.jetbrains.kotlin.android' version '1.9.22' apply false
-          }
-          EOF
-
-      - name: Fix settings.gradle
-        run: |
-          cat > settings.gradle << 'EOF'
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
-
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-
-          rootProject.name = "WebInspector"
-          include ':app'
-          EOF
-
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace --no-daemon
+      - name: Build APK
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: WebInspector-APK
           path: app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Show build info
-        if: success()
-        run: |
-          echo "✅ Build successful!"
-          ls -lh app/build/outputs/apk/debug/
