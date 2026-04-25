@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           java-version: '17'
@@ -160,7 +161,6 @@ jobs:
 
           class MainActivity : AppCompatActivity() {
 
-              // ── Views ──────────────────────────────────────────────────
               private var webView: WebView? = null
               private var root: FrameLayout? = null
               private var urlBar: EditText? = null
@@ -168,69 +168,52 @@ jobs:
               private var bottomBar: FrameLayout? = null
               private var inspBanner: LinearLayout? = null
               private var inspPanel: LinearLayout? = null
-
-              // ── State ──────────────────────────────────────────────────
               private var prefs: SharedPreferences? = null
               private var inspMode = false
               private var curUrl = ""
               private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-              // ── Constants ──────────────────────────────────────────────
               companion object {
-                  const val P_SHOW_UI = "show_ui"
-                  const val P_ENGINE  = "engine"
-                  const val EG = "google"
-                  const val EY = "yandex"
-                  const val EB = "bing"
-                  const val ED = "duck"
+                  const val P_UI = "show_ui"
+                  const val P_ENG = "engine"
+                  const val EG = "google"; const val EY = "yandex"
+                  const val EB = "bing";   const val ED = "duck"
                   const val EBR = "brave"
               }
 
-              // ── Metrics ────────────────────────────────────────────────
-              private fun dp(v: Float): Int = TypedValue.applyDimension(
-                  TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics
-              ).toInt()
+              private fun dp(v: Float) = TypedValue.applyDimension(
+                  TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics).toInt()
 
-              // ── Colors ─────────────────────────────────────────────────
-              private val cBg      = Color.parseColor("#050508")
-              private val cAccent  = Color.parseColor("#6C63FF")
-              private val cAccent2 = Color.parseColor("#9D50FF")
-              private val cText    = Color.WHITE
-              private val cText2   = Color.parseColor("#CCFFFFFF")
-              private val cText3   = Color.parseColor("#60FFFFFF")
-              private val cBorder  = Color.parseColor("#25FFFFFF")
-              private val cRipple  = Color.parseColor("#35FFFFFF")
-              private val cSuccess = Color.parseColor("#32D74B")
+              // Colors
+              private val cBg     = Color.parseColor("#050508")
+              private val cAcc    = Color.parseColor("#6C63FF")
+              private val cAcc2   = Color.parseColor("#9D50FF")
+              private val cText   = Color.WHITE
+              private val cText2  = Color.parseColor("#CCFFFFFF")
+              private val cText3  = Color.parseColor("#60FFFFFF")
+              private val cBdr    = Color.parseColor("#25FFFFFF")
+              private val cRip    = Color.parseColor("#35FFFFFF")
+              private val cOk     = Color.parseColor("#32D74B")
 
-              // ══════════════════════════════════════════════════════════
-              //  DRAWABLES
-              // ══════════════════════════════════════════════════════════
+              // ── Drawables ──────────────────────────────────────────────
 
-              /** Multi-layer liquid glass — dark + specular highlight + border */
-              private fun glass(r: Float = 22f, tint: Boolean = false): Drawable {
+              private fun glass(r: Float = 22f): Drawable {
                   val rad = dp(r).toFloat()
                   return object : Drawable() {
                       val p = Paint(Paint.ANTI_ALIAS_FLAG)
                       override fun draw(c: Canvas) {
                           val rc = RectF(bounds)
-                          // base dark
-                          p.color = Color.parseColor("#D4090910"); p.style = Paint.Style.FILL
+                          p.style = Paint.Style.FILL
+                          p.color = Color.parseColor("#D4090910")
                           c.drawRoundRect(rc, rad, rad, p)
-                          // glass tint
-                          p.color = if (tint) Color.parseColor("#1A6C63FF")
-                                    else Color.parseColor("#0EFFFFFF")
+                          p.color = Color.parseColor("#0EFFFFFF")
                           c.drawRoundRect(rc, rad, rad, p)
-                          // top specular
-                          p.shader = LinearGradient(
-                              0f, rc.top, 0f, rc.top + rc.height() * 0.5f,
+                          p.shader = LinearGradient(0f, rc.top, 0f, rc.top + rc.height() * 0.5f,
                               intArrayOf(Color.parseColor("#28FFFFFF"), Color.TRANSPARENT),
-                              null, Shader.TileMode.CLAMP
-                          )
-                          c.drawRoundRect(RectF(rc.left+1f, rc.top+1f,
-                              rc.right-1f, rc.centerY()), rad, rad, p)
+                              null, Shader.TileMode.CLAMP)
+                          c.drawRoundRect(RectF(rc.left+1f,rc.top+1f,rc.right-1f,rc.centerY()),rad,rad,p)
                           p.shader = null
-                          // border
-                          p.color = cBorder; p.style = Paint.Style.STROKE
+                          p.color = cBdr; p.style = Paint.Style.STROKE
                           p.strokeWidth = dp(0.6f).toFloat()
                           c.drawRoundRect(rc, rad, rad, p)
                           p.style = Paint.Style.FILL
@@ -242,16 +225,16 @@ jobs:
                   }
               }
 
-              private fun accentGlass(r: Float = 16f): Drawable {
+              private fun accGlass(r: Float = 16f): Drawable {
                   val rad = dp(r).toFloat()
                   return object : Drawable() {
                       val p = Paint(Paint.ANTI_ALIAS_FLAG)
                       override fun draw(c: Canvas) {
                           val rc = RectF(bounds)
                           p.shader = LinearGradient(rc.left,rc.top,rc.right,rc.bottom,
-                              intArrayOf(cAccent,cAccent2),null,Shader.TileMode.CLAMP)
+                              intArrayOf(cAcc,cAcc2),null,Shader.TileMode.CLAMP)
                           c.drawRoundRect(rc,rad,rad,p); p.shader=null
-                          p.color=Color.parseColor("#28FFFFFF")
+                          p.color = Color.parseColor("#28FFFFFF")
                           c.drawRoundRect(RectF(rc.left+1f,rc.top+1f,rc.right-1f,rc.centerY()),rad,rad,p)
                       }
                       override fun setAlpha(a: Int) {}
@@ -261,62 +244,62 @@ jobs:
                   }
               }
 
-              private fun ripple(base: Drawable) = RippleDrawable(
-                  android.content.res.ColorStateList.valueOf(cRipple), base, null
-              )
-
-              private fun pill(r: Float = 999f): Drawable {
-                  val rad = dp(r).toFloat()
-                  return object : Drawable() {
-                      val p = Paint(Paint.ANTI_ALIAS_FLAG)
-                      override fun draw(c: Canvas) {
-                          val rc = RectF(bounds)
-                          p.color = Color.parseColor("#22FFFFFF")
-                          c.drawRoundRect(rc,rad,rad,p)
-                          p.color = Color.parseColor("#15FFFFFF"); p.style=Paint.Style.STROKE
-                          p.strokeWidth = dp(0.5f).toFloat()
-                          c.drawRoundRect(rc,rad,rad,p); p.style=Paint.Style.FILL
-                      }
-                      override fun setAlpha(a: Int) {}
-                      override fun setColorFilter(f: ColorFilter?) {}
-                      @Suppress("OVERRIDE_DEPRECATION")
-                      override fun getOpacity() = PixelFormat.TRANSLUCENT
+              private fun pillBg(): Drawable = object : Drawable() {
+                  val p = Paint(Paint.ANTI_ALIAS_FLAG)
+                  override fun draw(c: Canvas) {
+                      val rc = RectF(bounds); val r = rc.height()/2f
+                      p.color = Color.parseColor("#22FFFFFF"); c.drawRoundRect(rc,r,r,p)
+                      p.color = Color.parseColor("#15FFFFFF"); p.style=Paint.Style.STROKE
+                      p.strokeWidth=dp(0.5f).toFloat(); c.drawRoundRect(rc,r,r,p)
+                      p.style=Paint.Style.FILL
                   }
+                  override fun setAlpha(a: Int) {}
+                  override fun setColorFilter(f: ColorFilter?) {}
+                  @Suppress("OVERRIDE_DEPRECATION")
+                  override fun getOpacity() = PixelFormat.TRANSLUCENT
               }
 
-              // ══════════════════════════════════════════════════════════
-              //  ICONS — pure Canvas SVG-style
-              // ══════════════════════════════════════════════════════════
-              enum class Ic {
-                  BACK, FWD, REFRESH, INSPECT, CODE, FOLDER,
-                  DOWNLOAD, CLOSE, SEARCH, SETTINGS, CHECK,
-                  GLOBE, SHIELD, STAR, MENU
+              private fun codeBg(): Drawable = object : Drawable() {
+                  val p = Paint(Paint.ANTI_ALIAS_FLAG)
+                  override fun draw(c: Canvas) {
+                      val r = dp(12f).toFloat()
+                      p.color = Color.parseColor("#0D1117"); c.drawRoundRect(RectF(bounds),r,r,p)
+                      p.color = Color.parseColor("#20FFFFFF"); p.style=Paint.Style.STROKE
+                      p.strokeWidth=dp(0.5f).toFloat(); c.drawRoundRect(RectF(bounds),r,r,p)
+                      p.style=Paint.Style.FILL
+                  }
+                  override fun setAlpha(a: Int) {}
+                  override fun setColorFilter(f: ColorFilter?) {}
+                  @Suppress("OVERRIDE_DEPRECATION")
+                  override fun getOpacity() = PixelFormat.TRANSLUCENT
               }
 
-              private fun ico(t: Ic, szDp: Int = 22, col: Int = cText): Bitmap {
-                  val s = dp(szDp.toFloat())
-                  val b = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+              private fun rip(d: Drawable) = RippleDrawable(
+                  android.content.res.ColorStateList.valueOf(cRip), d, null)
+
+              // ── Icons ──────────────────────────────────────────────────
+
+              enum class Ic { BACK, FWD, RELOAD, INSPECT, CODE, FOLDER,
+                  DL, X, SEARCH, GEAR, CHECK, GLOBE, SHIELD, STAR }
+
+              private fun ico(t: Ic, sz: Int=22, col: Int=cText): Bitmap {
+                  val s = dp(sz.toFloat())
+                  val b = Bitmap.createBitmap(s,s,Bitmap.Config.ARGB_8888)
                   val cv = Canvas(b)
-                  val sw = s * 0.09f
+                  val sw = s*0.09f
                   val st = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                      color = col; style = Paint.Style.STROKE
-                      strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
-                      strokeWidth = sw
-                  }
-                  val fi = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                      color = col; style = Paint.Style.FILL
-                  }
-                  val f = s / 24f
-                  fun x(v: Float) = v * f
-                  fun y(v: Float) = v * f
-                  fun path(block: Path.() -> Unit) = Path().apply(block)
-
-                  when (t) {
-                      Ic.BACK    -> cv.drawPath(path{ moveTo(x(15f),y(5f));lineTo(x(7f),y(12f));lineTo(x(15f),y(19f)) },st)
-                      Ic.FWD     -> cv.drawPath(path{ moveTo(x(9f),y(5f));lineTo(x(17f),y(12f));lineTo(x(9f),y(19f)) },st)
-                      Ic.REFRESH -> {
+                      color=col; style=Paint.Style.STROKE
+                      strokeCap=Paint.Cap.ROUND; strokeJoin=Paint.Join.ROUND; strokeWidth=sw }
+                  val fi = Paint(Paint.ANTI_ALIAS_FLAG).apply { color=col; style=Paint.Style.FILL }
+                  val f = s/24f
+                  fun x(v:Float)=v*f; fun y(v:Float)=v*f
+                  fun path(block: Path.()->Unit) = Path().apply(block)
+                  when(t){
+                      Ic.BACK    -> cv.drawPath(path{moveTo(x(15f),y(5f));lineTo(x(7f),y(12f));lineTo(x(15f),y(19f))},st)
+                      Ic.FWD     -> cv.drawPath(path{moveTo(x(9f),y(5f));lineTo(x(17f),y(12f));lineTo(x(9f),y(19f))},st)
+                      Ic.RELOAD  -> {
                           cv.drawArc(RectF(x(3.5f),y(3.5f),x(20.5f),y(20.5f)),-85f,275f,false,st)
-                          cv.drawPath(path{ moveTo(x(12f),y(1.5f));lineTo(x(15.5f),y(5f));lineTo(x(8.5f),y(5f));close() },fi)
+                          cv.drawPath(path{moveTo(x(12f),y(1.5f));lineTo(x(15.5f),y(5f));lineTo(x(8.5f),y(5f));close()},fi)
                       }
                       Ic.INSPECT -> {
                           cv.drawCircle(x(12f),y(12f),x(5.5f),st)
@@ -328,27 +311,24 @@ jobs:
                       }
                       Ic.CODE    -> cv.drawPath(path{
                           moveTo(x(8f),y(6f));lineTo(x(2f),y(12f));lineTo(x(8f),y(18f))
-                          moveTo(x(16f),y(6f));lineTo(x(22f),y(12f));lineTo(x(16f),y(18f))
-                      },st)
+                          moveTo(x(16f),y(6f));lineTo(x(22f),y(12f));lineTo(x(16f),y(18f))},st)
                       Ic.FOLDER  -> cv.drawPath(path{
                           moveTo(x(2f),y(8f));lineTo(x(2f),y(19f));lineTo(x(22f),y(19f))
                           lineTo(x(22f),y(9f));lineTo(x(12f),y(9f));lineTo(x(10f),y(7f))
-                          lineTo(x(4f),y(7f));close()
-                      },st)
-                      Ic.DOWNLOAD -> {
+                          lineTo(x(4f),y(7f));close()},st)
+                      Ic.DL      -> {
                           cv.drawLine(x(12f),y(3f),x(12f),y(15f),st)
                           cv.drawPath(path{moveTo(x(6f),y(10f));lineTo(x(12f),y(16f));lineTo(x(18f),y(10f))},st)
                           cv.drawLine(x(3f),y(20f),x(21f),y(20f),st)
                       }
-                      Ic.CLOSE   -> { cv.drawLine(x(5f),y(5f),x(19f),y(19f),st); cv.drawLine(x(19f),y(5f),x(5f),y(19f),st) }
-                      Ic.SEARCH  -> { cv.drawCircle(x(10.5f),y(10.5f),x(6f),st); cv.drawLine(x(15f),y(15f),x(21f),y(21f),st) }
-                      Ic.SETTINGS -> {
+                      Ic.X       -> {cv.drawLine(x(5f),y(5f),x(19f),y(19f),st);cv.drawLine(x(19f),y(5f),x(5f),y(19f),st)}
+                      Ic.SEARCH  -> {cv.drawCircle(x(10.5f),y(10.5f),x(6f),st);cv.drawLine(x(15f),y(15f),x(21f),y(21f),st)}
+                      Ic.GEAR    -> {
                           cv.drawCircle(x(12f),y(12f),x(3f),st)
-                          for (i in 0 until 8) {
-                              val a = Math.toRadians(i*45.0)
-                              val cos = Math.cos(a).toFloat(); val sin = Math.sin(a).toFloat()
-                              cv.drawLine(x(12f)+cos*x(6f),y(12f)+sin*y(6f),
-                                          x(12f)+cos*x(9.5f),y(12f)+sin*y(9.5f),st)
+                          for(i in 0 until 8){
+                              val a=Math.toRadians(i*45.0)
+                              val cs=Math.cos(a).toFloat(); val sn=Math.sin(a).toFloat()
+                              cv.drawLine(x(12f)+cs*x(6f),y(12f)+sn*y(6f),x(12f)+cs*x(9.5f),y(12f)+sn*y(9.5f),st)
                           }
                       }
                       Ic.CHECK   -> cv.drawPath(path{moveTo(x(4f),y(12f));lineTo(x(9f),y(17f));lineTo(x(20f),y(6f))},st)
@@ -360,37 +340,27 @@ jobs:
                       }
                       Ic.SHIELD  -> cv.drawPath(path{
                           moveTo(x(12f),y(2f));lineTo(x(20f),y(6f));lineTo(x(20f),y(13f))
-                          lineTo(x(12f),y(22f));lineTo(x(4f),y(13f));lineTo(x(4f),y(6f));close()
-                      },st)
+                          lineTo(x(12f),y(22f));lineTo(x(4f),y(13f));lineTo(x(4f),y(6f));close()},st)
                       Ic.STAR    -> {
-                          val p2 = path {
-                              val cx=x(12f); val cy=y(12f); val or=x(9f); val ir=x(4f)
-                              for (i in 0 until 10) {
-                                  val a = Math.toRadians(i*36.0-90.0)
-                                  val r = if (i%2==0) or else ir
-                                  val px = cx+(Math.cos(a)*r).toFloat()
-                                  val py = cy+(Math.sin(a)*r).toFloat()
-                                  if (i==0) moveTo(px,py) else lineTo(px,py)
-                              }; close()
-                          }; cv.drawPath(p2,st)
-                      }
-                      Ic.MENU    -> {
-                          cv.drawLine(x(3f),y(7f),x(21f),y(7f),st)
-                          cv.drawLine(x(3f),y(12f),x(21f),y(12f),st)
-                          cv.drawLine(x(3f),y(17f),x(21f),y(17f),st)
+                          val p2=path{
+                              val cx=x(12f);val cy=y(12f);val or=x(9f);val ir=x(4f)
+                              for(i in 0 until 10){
+                                  val a=Math.toRadians(i*36.0-90.0)
+                                  val r=if(i%2==0)or else ir
+                                  val px=cx+(Math.cos(a)*r).toFloat();val py=cy+(Math.sin(a)*r).toFloat()
+                                  if(i==0)moveTo(px,py) else lineTo(px,py)
+                              };close()
+                          };cv.drawPath(p2,st)
                       }
                   }
                   return b
               }
 
-              private fun icoView(t: Ic, sz: Int=22, col: Int=cText, pad: Int=10): ImageView {
-                  return ImageView(this).apply {
-                      setImageBitmap(ico(t,sz,col))
-                      scaleType = ImageView.ScaleType.CENTER_INSIDE
-                      val p = dp(pad.toFloat())
-                      setPadding(p,p,p,p)
-                      background = ripple(ColorDrawable(Color.TRANSPARENT))
-                  }
+              private fun icoBtn(t: Ic, sz:Int=22, col:Int=cText, pad:Int=10) = ImageView(this).apply {
+                  setImageBitmap(ico(t,sz,col))
+                  scaleType=ImageView.ScaleType.CENTER_INSIDE
+                  val p=dp(pad.toFloat()); setPadding(p,p,p,p)
+                  background=rip(ColorDrawable(Color.TRANSPARENT))
               }
 
               // ══════════════════════════════════════════════════════════
@@ -399,1067 +369,758 @@ jobs:
               @SuppressLint("SetJavaScriptEnabled")
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
-
                   try {
-                      prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
-
+                      prefs = getSharedPreferences("p", Context.MODE_PRIVATE)
                       WindowCompat.setDecorFitsSystemWindows(window, false)
                       window.statusBarColor = Color.TRANSPARENT
                       window.navigationBarColor = Color.TRANSPARENT
-                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                          window.insetsController?.hide(
-                              android.view.WindowInsets.Type.navigationBars()
-                          )
+
+                      root = FrameLayout(this).also {
+                          it.setBackgroundColor(cBg)
+                          setContentView(it)
                       }
-
-                      root = FrameLayout(this)
-                      root!!.setBackgroundColor(cBg)
-                      setContentView(root)
-
-                      buildWebView()
-                      buildTopBar()
-                      buildBottomBar()
-                      buildInspector()
-
-                      applyUi()
-                      loadHome()
-
+                      buildWV(); buildTop(); buildBottom(); buildInspector()
+                      applyUi(); loadHome()
                   } catch (e: Exception) {
-                      Toast.makeText(this, "Init error: ${e.message}", Toast.LENGTH_LONG).show()
+                      Toast.makeText(this,"Crash: ${e.message}",Toast.LENGTH_LONG).show()
                   }
               }
 
-              // ── Prefs helpers ──────────────────────────────────────────
-              private fun getEngine() = prefs?.getString(P_ENGINE, EG) ?: EG
-              private fun getShowUi() = prefs?.getBoolean(P_SHOW_UI, true) ?: true
+              private fun eng() = prefs?.getString(P_ENG,EG)?:EG
+              private fun showUi() = prefs?.getBoolean(P_UI,true)?:true
 
               private fun applyUi() {
-                  val show = getShowUi()
-                  topBar?.visibility    = if (show) View.VISIBLE else View.GONE
-                  bottomBar?.visibility = if (show) View.VISIBLE else View.GONE
+                  val v = if(showUi()) View.VISIBLE else View.GONE
+                  topBar?.visibility=v; bottomBar?.visibility=v
               }
 
               private fun loadHome() {
-                  val url = when (getEngine()) {
-                      EY  -> "https://yandex.ru"
-                      EB  -> "https://bing.com"
-                      ED  -> "https://duckduckgo.com"
-                      EBR -> "https://search.brave.com"
-                      else -> "https://google.com"
-                  }
+                  val url = when(eng()){EY->"https://yandex.ru";EB->"https://bing.com"
+                      ED->"https://duckduckgo.com";EBR->"https://search.brave.com"
+                      else->"https://google.com"}
                   webView?.loadUrl(url)
               }
 
-              private fun searchUrl(q: String): String {
-                  val eq = q.replace(" ","+")
-                  return when (getEngine()) {
-                      EY  -> "https://yandex.ru/search/?text=$eq"
-                      EB  -> "https://bing.com/search?q=$eq"
-                      ED  -> "https://duckduckgo.com/?q=$eq"
-                      EBR -> "https://search.brave.com/search?q=$eq"
-                      else -> "https://google.com/search?q=$eq"
-                  }
+              private fun searchUrl(q:String):String {
+                  val e=q.replace(" ","+")
+                  return when(eng()){EY->"https://yandex.ru/search/?text=$e"
+                      EB->"https://bing.com/search?q=$e";ED->"https://duckduckgo.com/?q=$e"
+                      EBR->"https://search.brave.com/search?q=$e"
+                      else->"https://google.com/search?q=$e"}
               }
 
               // ══════════════════════════════════════════════════════════
-              //  WEBVIEW
+              //  WebView
               // ══════════════════════════════════════════════════════════
               @SuppressLint("SetJavaScriptEnabled")
-              private fun buildWebView() {
+              private fun buildWV() {
                   webView = WebView(this).apply {
-                      layoutParams = FrameLayout.LayoutParams(
-                          FrameLayout.LayoutParams.MATCH_PARENT,
-                          FrameLayout.LayoutParams.MATCH_PARENT
-                      )
+                      layoutParams=FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.MATCH_PARENT,FrameLayout.LayoutParams.MATCH_PARENT)
                       settings.apply {
-                          javaScriptEnabled = true
-                          domStorageEnabled = true
-                          loadWithOverviewMode = true
-                          useWideViewPort = true
-                          builtInZoomControls = true
-                          displayZoomControls = false
-                          mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                          javaScriptEnabled=true; domStorageEnabled=true
+                          loadWithOverviewMode=true; useWideViewPort=true
+                          builtInZoomControls=true; displayZoomControls=false
+                          mixedContentMode=WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                       }
-                      addJavascriptInterface(JsBridge(), "WebInspector")
-                      webViewClient = object : WebViewClient() {
-                          override fun onPageFinished(view: WebView, url: String) {
-                              curUrl = url
-                              urlBar?.setText(url)
-                              urlBar?.setSelection(0)
+                      addJavascriptInterface(JsBridge(),"WebInspector")
+                      webViewClient=object:WebViewClient(){
+                          override fun onPageFinished(v:WebView,url:String){
+                              curUrl=url; urlBar?.setText(url); urlBar?.setSelection(0)
                           }
-                          override fun shouldOverrideUrlLoading(
-                              view: WebView, req: WebResourceRequest
-                          ) = false
+                          override fun shouldOverrideUrlLoading(v:WebView,r:WebResourceRequest)=false
                       }
-                      webChromeClient = WebChromeClient()
+                      webChromeClient=WebChromeClient()
                   }
                   root!!.addView(webView)
               }
 
               // ══════════════════════════════════════════════════════════
-              //  TOP BAR
+              //  Top bar
               // ══════════════════════════════════════════════════════════
-              private fun buildTopBar() {
+              private fun buildTop() {
                   val frame = FrameLayout(this).apply {
-                      layoutParams = FrameLayout.LayoutParams(
+                      layoutParams=FrameLayout.LayoutParams(
                           FrameLayout.LayoutParams.MATCH_PARENT,
-                          FrameLayout.LayoutParams.WRAP_CONTENT,
-                          Gravity.TOP
-                      )
+                          FrameLayout.LayoutParams.WRAP_CONTENT,Gravity.TOP)
                   }
-
-                  // Scrim
                   frame.addView(View(this).apply {
-                      layoutParams = FrameLayout.LayoutParams(
-                          FrameLayout.LayoutParams.MATCH_PARENT, dp(130f)
-                      )
-                      background = GradientDrawable(
-                          GradientDrawable.Orientation.TOP_BOTTOM,
-                          intArrayOf(Color.parseColor("#F2000000"), Color.TRANSPARENT)
-                      )
+                      layoutParams=FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,dp(130f))
+                      background=GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                          intArrayOf(Color.parseColor("#F2000000"),Color.TRANSPARENT))
                   })
-
-                  // Row
-                  val row = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
-                      gravity = Gravity.CENTER_VERTICAL
-                      layoutParams = FrameLayout.LayoutParams(
+                  val row=LinearLayout(this).apply {
+                      orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL
+                      layoutParams=FrameLayout.LayoutParams(
                           FrameLayout.LayoutParams.MATCH_PARENT,
                           FrameLayout.LayoutParams.WRAP_CONTENT
-                      ).apply { setMargins(dp(10f),dp(52f),dp(10f),dp(8f)) }
+                      ).apply{setMargins(dp(10f),dp(52f),dp(10f),dp(8f))}
                   }
-
-                  // Glass pill for URL
-                  val pill = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
-                      gravity = Gravity.CENTER_VERTICAL
-                      background = glass(28f)
-                      elevation = dp(2f).toFloat()
+                  val pill=LinearLayout(this).apply {
+                      orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL
+                      background=glass(28f); elevation=dp(2f).toFloat()
                       setPadding(dp(4f),dp(4f),dp(4f),dp(4f))
                   }
+                  val bBack=icoBtn(Ic.BACK,18,cText2,8).apply{setOnClickListener{webView?.let{if(it.canGoBack())it.goBack()}}}
+                  val bFwd=icoBtn(Ic.FWD,18,cText2,8).apply{setOnClickListener{webView?.let{if(it.canGoForward())it.goForward()}}}
+                  val bRef=icoBtn(Ic.RELOAD,18,cText2,8).apply{setOnClickListener{webView?.reload()}}
+                  val bSet=icoBtn(Ic.GEAR,18,cText2,8).apply{setOnClickListener{showSettings()}}
 
-                  val btnBack = icoView(Ic.BACK,18,cText2,8).apply {
-                      setOnClickListener { webView?.let { if (it.canGoBack()) it.goBack() } }
-                  }
-                  val btnFwd = icoView(Ic.FWD,18,cText2,8).apply {
-                      setOnClickListener { webView?.let { if (it.canGoForward()) it.goForward() } }
-                  }
-                  val btnRef = icoView(Ic.REFRESH,18,cText2,8).apply {
-                      setOnClickListener { webView?.reload() }
-                  }
-                  val btnSet = icoView(Ic.SETTINGS,18,cText2,8).apply {
-                      setOnClickListener { showSettings() }
-                  }
-
-                  // Inner URL field
-                  val urlField = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
-                      gravity = Gravity.CENTER_VERTICAL
-                      background = pill()
-                      setPadding(dp(10f),0,dp(8f),0)
+                  val urlField=LinearLayout(this).apply {
+                      orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL
+                      background=pillBg(); setPadding(dp(10f),0,dp(8f),0)
                   }
                   urlField.addView(ImageView(this).apply {
                       setImageBitmap(ico(Ic.GLOBE,13,cText3))
-                      scaleType = ImageView.ScaleType.CENTER_INSIDE
-                  }, LinearLayout.LayoutParams(dp(16f),dp(16f)))
+                      scaleType=ImageView.ScaleType.CENTER_INSIDE
+                  },LinearLayout.LayoutParams(dp(16f),dp(16f)))
 
-                  urlBar = EditText(this).apply {
-                      background = null
-                      setTextColor(cText)
-                      setHintTextColor(cText3)
-                      hint = "Search or URL"
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                      maxLines = 1
-                      imeOptions = EditorInfo.IME_ACTION_GO
-                      inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                  urlBar=EditText(this).apply {
+                      background=null; setTextColor(cText); setHintTextColor(cText3)
+                      hint="Search or URL"; setTextSize(TypedValue.COMPLEX_UNIT_SP,14f)
+                      maxLines=1; imeOptions=EditorInfo.IME_ACTION_GO
+                      inputType=android.text.InputType.TYPE_CLASS_TEXT or
                               android.text.InputType.TYPE_TEXT_VARIATION_URI
-                      setOnEditorActionListener { _, id, _ ->
-                          if (id == EditorInfo.IME_ACTION_GO) { navigate(); true } else false
-                      }
-                      setOnFocusChangeListener { _, hasFocus -> if (hasFocus) selectAll() }
+                      setOnEditorActionListener{_,id,_->if(id==EditorInfo.IME_ACTION_GO){nav();true}else false}
+                      setOnFocusChangeListener{_,f->if(f)selectAll()}
                   }
-                  urlField.addView(urlBar, LinearLayout.LayoutParams(
-                      0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
-                  ).apply { setMargins(dp(6f),0,0,0) })
+                  urlField.addView(urlBar,LinearLayout.LayoutParams(
+                      0,ViewGroup.LayoutParams.WRAP_CONTENT,1f).apply{setMargins(dp(6f),0,0,0)})
 
-                  pill.addView(btnBack, LinearLayout.LayoutParams(dp(36f),dp(36f)))
-                  pill.addView(btnFwd,  LinearLayout.LayoutParams(dp(36f),dp(36f)))
-                  pill.addView(urlField, LinearLayout.LayoutParams(0,dp(34f),1f).apply {
-                      setMargins(dp(3f),0,dp(3f),0)
-                  })
-                  pill.addView(btnRef, LinearLayout.LayoutParams(dp(36f),dp(36f)))
-                  pill.addView(btnSet, LinearLayout.LayoutParams(dp(36f),dp(36f)))
-
-                  row.addView(pill, LinearLayout.LayoutParams(
-                      LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-                  ))
+                  pill.addView(bBack,LinearLayout.LayoutParams(dp(36f),dp(36f)))
+                  pill.addView(bFwd,LinearLayout.LayoutParams(dp(36f),dp(36f)))
+                  pill.addView(urlField,LinearLayout.LayoutParams(0,dp(34f),1f).apply{setMargins(dp(3f),0,dp(3f),0)})
+                  pill.addView(bRef,LinearLayout.LayoutParams(dp(36f),dp(36f)))
+                  pill.addView(bSet,LinearLayout.LayoutParams(dp(36f),dp(36f)))
+                  row.addView(pill,LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
                   frame.addView(row)
-
-                  topBar = frame
-                  root!!.addView(frame)
+                  topBar=frame; root!!.addView(frame)
               }
 
-              private fun navigate() {
-                  val raw = urlBar?.text?.toString()?.trim() ?: return
-                  if (raw.isEmpty()) return
-                  val url = when {
-                      raw.startsWith("http://") || raw.startsWith("https://") -> raw
-                      raw.contains(".") && !raw.contains(" ") -> "https://$raw"
-                      else -> searchUrl(raw)
+              private fun nav() {
+                  val raw=urlBar?.text?.toString()?.trim()?:return
+                  if(raw.isEmpty())return
+                  val url=when{
+                      raw.startsWith("http://")||raw.startsWith("https://")->raw
+                      raw.contains(".")&&!raw.contains(" ")->"https://$raw"
+                      else->searchUrl(raw)
                   }
                   webView?.loadUrl(url)
-                  val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                  imm?.hideSoftInputFromWindow(urlBar?.windowToken, 0)
+                  (getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+                      ?.hideSoftInputFromWindow(urlBar?.windowToken,0)
                   urlBar?.clearFocus()
               }
 
               // ══════════════════════════════════════════════════════════
-              //  BOTTOM BAR
+              //  Bottom bar
               // ══════════════════════════════════════════════════════════
-              private fun buildBottomBar() {
-                  val frame = FrameLayout(this).apply {
-                      layoutParams = FrameLayout.LayoutParams(
+              private fun buildBottom() {
+                  val frame=FrameLayout(this).apply {
+                      layoutParams=FrameLayout.LayoutParams(
                           FrameLayout.LayoutParams.MATCH_PARENT,
-                          FrameLayout.LayoutParams.WRAP_CONTENT,
-                          Gravity.BOTTOM
-                      )
+                          FrameLayout.LayoutParams.WRAP_CONTENT,Gravity.BOTTOM)
                   }
                   frame.addView(View(this).apply {
-                      layoutParams = FrameLayout.LayoutParams(
-                          FrameLayout.LayoutParams.MATCH_PARENT, dp(120f)
-                      )
-                      background = GradientDrawable(
-                          GradientDrawable.Orientation.BOTTOM_TOP,
-                          intArrayOf(Color.parseColor("#F2000000"), Color.TRANSPARENT)
-                      )
+                      layoutParams=FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,dp(120f))
+                      background=GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,
+                          intArrayOf(Color.parseColor("#F2000000"),Color.TRANSPARENT))
                   })
-
-                  val row = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
-                      gravity = Gravity.CENTER
-                      layoutParams = FrameLayout.LayoutParams(
+                  val row=LinearLayout(this).apply {
+                      orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER
+                      layoutParams=FrameLayout.LayoutParams(
                           FrameLayout.LayoutParams.MATCH_PARENT,
                           ViewGroup.LayoutParams.WRAP_CONTENT
-                      ).apply { setMargins(dp(14f),0,dp(14f),dp(32f)) }
+                      ).apply{setMargins(dp(14f),0,dp(14f),dp(32f))}
                   }
-
-                  val pill = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
-                      gravity = Gravity.CENTER
-                      background = glass(32f)
-                      elevation = dp(4f).toFloat()
+                  val pill=LinearLayout(this).apply {
+                      orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER
+                      background=glass(32f); elevation=dp(4f).toFloat()
                       setPadding(dp(8f),dp(6f),dp(8f),dp(6f))
                   }
-
-                  pill.addView(mkToolBtn(Ic.INSPECT,"Inspect",true){ toggleInspector() })
-                  pill.addView(mkDivider())
-                  pill.addView(mkToolBtn(Ic.CODE,"Source"){ showSource() })
-                  pill.addView(mkDivider())
-                  pill.addView(mkToolBtn(Ic.FOLDER,"Files"){ showFiles() })
-
-                  row.addView(pill, LinearLayout.LayoutParams(
-                      LinearLayout.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-                  ))
+                  pill.addView(toolBtn(Ic.INSPECT,"Inspect",true){toggleInsp()})
+                  pill.addView(divLine())
+                  pill.addView(toolBtn(Ic.CODE,"Source"){showSrc()})
+                  pill.addView(divLine())
+                  pill.addView(toolBtn(Ic.FOLDER,"Files"){showFiles()})
+                  row.addView(pill,LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT))
                   frame.addView(row)
-
-                  bottomBar = frame
-                  root!!.addView(frame)
+                  bottomBar=frame; root!!.addView(frame)
               }
 
-              private fun mkDivider() = View(this).apply {
+              private fun divLine()=View(this).apply {
                   setBackgroundColor(Color.parseColor("#28FFFFFF"))
-                  layoutParams = LinearLayout.LayoutParams(1,dp(26f)).apply {
-                      setMargins(dp(3f),0,dp(3f),0)
-                  }
+                  layoutParams=LinearLayout.LayoutParams(1,dp(26f)).apply{setMargins(dp(3f),0,dp(3f),0)}
               }
 
-              private fun mkToolBtn(ic: Ic, label: String, accent: Boolean=false, cb: ()->Unit): LinearLayout {
-                  return LinearLayout(this).apply {
-                      orientation = LinearLayout.VERTICAL
-                      gravity = Gravity.CENTER
-                      background = ripple(if (accent) accentGlass(16f) else ColorDrawable(Color.TRANSPARENT))
-                      setPadding(dp(12f),dp(8f),dp(12f),dp(8f))
-                      setOnClickListener { cb() }
-                      addView(ImageView(this@MainActivity).apply {
-                          setImageBitmap(ico(ic,20,cText))
-                          scaleType = ImageView.ScaleType.CENTER_INSIDE
-                      }, LinearLayout.LayoutParams(dp(24f),dp(24f)))
-                      addView(TextView(this@MainActivity).apply {
-                          text = label
-                          setTextColor(if (accent) cText else cText3)
-                          setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f)
-                          gravity = Gravity.CENTER
-                          typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-                      }, LinearLayout.LayoutParams(dp(56f), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                          setMargins(0,dp(3f),0,0)
-                      })
-                  }
+              private fun toolBtn(ic:Ic,label:String,acc:Boolean=false,cb:()->Unit)=LinearLayout(this).apply {
+                  orientation=LinearLayout.VERTICAL; gravity=Gravity.CENTER
+                  background=rip(if(acc)accGlass(16f) else ColorDrawable(Color.TRANSPARENT))
+                  setPadding(dp(12f),dp(8f),dp(12f),dp(8f))
+                  setOnClickListener{cb()}
+                  addView(ImageView(this@MainActivity).apply{
+                      setImageBitmap(ico(ic,20,cText)); scaleType=ImageView.ScaleType.CENTER_INSIDE
+                  },LinearLayout.LayoutParams(dp(24f),dp(24f)))
+                  addView(TextView(this@MainActivity).apply{
+                      text=label; setTextColor(if(acc)cText else cText3)
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP,9.5f); gravity=Gravity.CENTER
+                      typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+                  },LinearLayout.LayoutParams(dp(56f),ViewGroup.LayoutParams.WRAP_CONTENT).apply{setMargins(0,dp(3f),0,0)})
               }
 
               // ══════════════════════════════════════════════════════════
-              //  INSPECTOR
+              //  Inspector
               // ══════════════════════════════════════════════════════════
               private fun buildInspector() {
-                  // Banner
-                  inspBanner = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
-                      gravity = Gravity.CENTER_VERTICAL
-                      background = object : Drawable() {
-                          val p = Paint(Paint.ANTI_ALIAS_FLAG)
-                          override fun draw(c: Canvas) {
-                              val rc = RectF(bounds); val r = dp(20f).toFloat()
-                              p.shader = LinearGradient(0f,0f,rc.width(),0f,
+                  inspBanner=LinearLayout(this).apply {
+                      orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL
+                      background=object:Drawable(){
+                          val p=Paint(Paint.ANTI_ALIAS_FLAG)
+                          override fun draw(c:Canvas){
+                              val rc=RectF(bounds); val r=dp(20f).toFloat()
+                              p.shader=LinearGradient(0f,0f,rc.width(),0f,
                                   intArrayOf(Color.parseColor("#DD6C63FF"),Color.parseColor("#DD9D50FF")),
                                   null,Shader.TileMode.CLAMP)
                               c.drawRoundRect(rc,r,r,p); p.shader=null
                               p.color=Color.parseColor("#30FFFFFF")
                               c.drawRoundRect(RectF(rc.left+1f,rc.top+1f,rc.right-1f,rc.centerY()),r,r,p)
                           }
-                          override fun setAlpha(a: Int) {}
-                          override fun setColorFilter(f: ColorFilter?) {}
-                          @Suppress("OVERRIDE_DEPRECATION")
-                          override fun getOpacity() = PixelFormat.TRANSLUCENT
+                          override fun setAlpha(a:Int){}
+                          override fun setColorFilter(f:ColorFilter?){}
+                          @Suppress("OVERRIDE_DEPRECATION") override fun getOpacity()=PixelFormat.TRANSLUCENT
                       }
                       setPadding(dp(14f),dp(10f),dp(10f),dp(10f))
-                      elevation = dp(8f).toFloat()
-                      visibility = View.GONE
+                      elevation=dp(8f).toFloat(); visibility=View.GONE
                   }
-                  inspBanner!!.addView(ImageView(this).apply {
-                      setImageBitmap(ico(Ic.INSPECT,16,cText))
-                      scaleType = ImageView.ScaleType.CENTER_INSIDE
-                  }, LinearLayout.LayoutParams(dp(20f),dp(20f)))
-                  inspBanner!!.addView(TextView(this).apply {
-                      text = "  Tap element to inspect"
-                      setTextColor(cText); setTextSize(TypedValue.COMPLEX_UNIT_SP,13f)
-                  }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT,1f))
-                  inspBanner!!.addView(icoView(Ic.CLOSE,16,cText,8).apply {
-                      setOnClickListener { toggleInspector() }
-                  }, LinearLayout.LayoutParams(dp(34f),dp(34f)))
+                  inspBanner!!.addView(ImageView(this).apply{
+                      setImageBitmap(ico(Ic.INSPECT,16,cText)); scaleType=ImageView.ScaleType.CENTER_INSIDE
+                  },LinearLayout.LayoutParams(dp(20f),dp(20f)))
+                  inspBanner!!.addView(TextView(this).apply{
+                      text="  Tap element to inspect"; setTextColor(cText); setTextSize(TypedValue.COMPLEX_UNIT_SP,13f)
+                  },LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f))
+                  inspBanner!!.addView(icoBtn(Ic.X,16,cText,8).apply{setOnClickListener{toggleInsp()}},
+                      LinearLayout.LayoutParams(dp(34f),dp(34f)))
+                  root!!.addView(inspBanner,FrameLayout.LayoutParams(
+                      FrameLayout.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT,Gravity.TOP
+                  ).apply{setMargins(dp(14f),dp(112f),dp(14f),0)})
 
-                  root!!.addView(inspBanner, FrameLayout.LayoutParams(
-                      FrameLayout.LayoutParams.MATCH_PARENT,
-                      ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP
-                  ).apply { setMargins(dp(14f),dp(112f),dp(14f),0) })
-
-                  // Panel
-                  inspPanel = LinearLayout(this).apply {
-                      orientation = LinearLayout.VERTICAL
-                      background = glass(26f)
+                  inspPanel=LinearLayout(this).apply {
+                      orientation=LinearLayout.VERTICAL; background=glass(26f)
                       setPadding(dp(16f),dp(14f),dp(16f),dp(18f))
-                      elevation = dp(16f).toFloat()
-                      visibility = View.GONE
+                      elevation=dp(16f).toFloat(); visibility=View.GONE
                   }
-                  root!!.addView(inspPanel, FrameLayout.LayoutParams(
-                      FrameLayout.LayoutParams.MATCH_PARENT, dp(330f), Gravity.BOTTOM
-                  ).apply { setMargins(dp(8f),0,dp(8f),dp(104f)) })
+                  root!!.addView(inspPanel,FrameLayout.LayoutParams(
+                      FrameLayout.LayoutParams.MATCH_PARENT,dp(330f),Gravity.BOTTOM
+                  ).apply{setMargins(dp(8f),0,dp(8f),dp(104f))})
               }
 
-              private fun toggleInspector() {
-                  inspMode = !inspMode
-                  if (inspMode) {
-                      inspBanner?.apply {
-                          visibility = View.VISIBLE; alpha = 0f
-                          translationY = -dp(16f).toFloat()
+              private fun toggleInsp() {
+                  inspMode=!inspMode
+                  if(inspMode){
+                      inspBanner?.apply{visibility=View.VISIBLE;alpha=0f;translationY=-dp(16f).toFloat()
                           animate().alpha(1f).translationY(0f).setDuration(280)
-                              .setInterpolator(DecelerateInterpolator(2f)).start()
-                      }
-                      webView?.evaluateJavascript(jsInspect(), null)
+                              .setInterpolator(DecelerateInterpolator(2f)).start()}
+                      webView?.evaluateJavascript(jsInsp(),null)
                   } else {
-                      inspBanner?.animate()?.alpha(0f)?.setDuration(180)?.withEndAction {
-                          inspBanner?.visibility = View.GONE
-                          inspBanner?.alpha = 1f
-                      }?.start()
-                      slideDownPanel()
-                      webView?.evaluateJavascript("try{window.__wiClean&&window.__wiClean()}catch(e){}", null)
+                      inspBanner?.animate()?.alpha(0f)?.setDuration(180)?.withEndAction{
+                          inspBanner?.visibility=View.GONE; inspBanner?.alpha=1f}?.start()
+                      panelDown()
+                      webView?.evaluateJavascript("try{window.__wc&&window.__wc()}catch(e){}",null)
                   }
               }
 
-              private fun slideDownPanel() {
-                  val panel = inspPanel ?: return
-                  if (panel.visibility != View.VISIBLE) return
-                  panel.animate().translationY(dp(600f).toFloat()).setDuration(260)
-                      .setInterpolator(DecelerateInterpolator(2f)).withEndAction {
-                          panel.visibility = View.GONE; panel.translationY = 0f
-                      }.start()
+              private fun toggleInspector() = toggleInsp()
+
+              private fun panelDown() {
+                  val p=inspPanel?:return; if(p.visibility!=View.VISIBLE)return
+                  p.animate().translationY(dp(600f).toFloat()).setDuration(260)
+                      .setInterpolator(DecelerateInterpolator(2f)).withEndAction{
+                          p.visibility=View.GONE; p.translationY=0f}.start()
               }
 
-              private fun slideUpPanel() {
-                  val panel = inspPanel ?: return
-                  panel.visibility = View.VISIBLE
-                  panel.translationY = dp(600f).toFloat()
-                  panel.animate().translationY(0f).setDuration(360)
-                      .setInterpolator(DecelerateInterpolator(2.5f)).start()
+              private fun panelUp() {
+                  val p=inspPanel?:return
+                  p.visibility=View.VISIBLE; p.translationY=dp(600f).toFloat()
+                  p.animate().translationY(0f).setDuration(360).setInterpolator(DecelerateInterpolator(2.5f)).start()
               }
 
-              // ── Element panel content ──────────────────────────────────
-              private fun showElement(tag: String, id: String, html: String, css: String) {
-                  val panel = inspPanel ?: return
+              private fun showEl(tag:String, id:String, html:String, css:String) {
+                  val panel=inspPanel?:return
                   panel.removeAllViews()
 
-                  // Header
-                  val hdr = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-                  }
-                  hdr.addView(chip("<$tag>", cAccent))
-                  if (id.isNotEmpty()) hdr.addView(chip("#$id", cSuccess))
-                  hdr.addView(View(this), LinearLayout.LayoutParams(0,1,1f))
-                  hdr.addView(icoView(Ic.CLOSE,16,cText3,6).apply {
-                      setOnClickListener { slideDownPanel() }
-                  }, LinearLayout.LayoutParams(dp(30f),dp(30f)))
+                  val hdr=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL}
+                  hdr.addView(chip("<$tag>",cAcc)); if(id.isNotEmpty())hdr.addView(chip("#$id",cOk))
+                  hdr.addView(View(this),LinearLayout.LayoutParams(0,1,1f))
+                  hdr.addView(icoBtn(Ic.X,16,cText3,6).apply{setOnClickListener{panelDown()}},
+                      LinearLayout.LayoutParams(dp(30f),dp(30f)))
                   panel.addView(hdr)
 
-                  // Tab bar
-                  val tabBar = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
-                      background = object : Drawable() {
-                          val p = Paint(Paint.ANTI_ALIAS_FLAG)
-                          override fun draw(c: Canvas) {
-                              p.color = Color.parseColor("#18FFFFFF")
-                              c.drawRoundRect(RectF(bounds),dp(11f).toFloat(),dp(11f).toFloat(),p)
-                          }
-                          override fun setAlpha(a: Int) {}
-                          override fun setColorFilter(f: ColorFilter?) {}
-                          @Suppress("OVERRIDE_DEPRECATION")
-                          override fun getOpacity() = PixelFormat.TRANSLUCENT
+                  val tabBar=LinearLayout(this).apply {
+                      orientation=LinearLayout.HORIZONTAL
+                      background=object:Drawable(){
+                          val p=Paint(Paint.ANTI_ALIAS_FLAG)
+                          override fun draw(c:Canvas){p.color=Color.parseColor("#18FFFFFF")
+                              c.drawRoundRect(RectF(bounds),dp(11f).toFloat(),dp(11f).toFloat(),p)}
+                          override fun setAlpha(a:Int){}; override fun setColorFilter(f:ColorFilter?){}
+                          @Suppress("OVERRIDE_DEPRECATION") override fun getOpacity()=PixelFormat.TRANSLUCENT
                       }
                       setPadding(dp(3f),dp(3f),dp(3f),dp(3f))
                   }
-                  panel.addView(tabBar, LinearLayout.LayoutParams(
-                      LinearLayout.LayoutParams.MATCH_PARENT, dp(38f)
-                  ).apply { setMargins(0,dp(10f),0,dp(8f)) })
+                  panel.addView(tabBar,LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT,dp(38f)).apply{setMargins(0,dp(10f),0,dp(8f))})
 
-                  val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-                  val scroll = ScrollView(this)
-                  scroll.addView(content)
-                  panel.addView(scroll, LinearLayout.LayoutParams(
-                      LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
-                  ))
+                  val content=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
+                  val scroll=ScrollView(this); scroll.addView(content)
+                  panel.addView(scroll,LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,0,1f))
 
-                  var activeTab = 0
-                  val tabViews = mutableListOf<TextView>()
+                  var cur=0; val tvs= mutableListOf<TextView>()
 
-                  fun selectTab(i: Int) {
-                      tabViews.forEachIndexed { idx, tv ->
-                          tv.background = if (idx==i) accentGlass(9f) else null
-                          tv.setTextColor(if (idx==i) cText else cText3)
-                      }
+                  fun selTab(i:Int){
+                      tvs.forEachIndexed{idx,tv->
+                          tv.background=if(idx==i)accGlass(9f) else null
+                          tv.setTextColor(if(idx==i)cText else cText3)}
                       content.removeAllViews()
-                      when (i) {
-                          0 -> { // HTML
-                              val et = EditText(this).apply {
+                      when(i){
+                          0->{
+                              val et=EditText(this).apply{
                                   setText(html); setTextColor(Color.parseColor("#E2E8F0"))
                                   setTextSize(TypedValue.COMPLEX_UNIT_SP,11.5f)
-                                  background = codeBackground(); typeface = Typeface.MONOSPACE
+                                  background=codeBg(); typeface=Typeface.MONOSPACE
                                   setPadding(dp(12f),dp(12f),dp(12f),dp(12f))
-                                  gravity = Gravity.TOP; minLines = 5
-                                  setHorizontallyScrolling(false)
+                                  gravity=Gravity.TOP; minLines=5; setHorizontallyScrolling(false)
                               }
                               content.addView(et)
-                              content.addView(TextView(this).apply {
-                                  text = "Apply Changes"; gravity = Gravity.CENTER
-                                  setTextColor(cText); setTextSize(TypedValue.COMPLEX_UNIT_SP,14f)
-                                  typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-                                  background = ripple(accentGlass(12f))
-                                  setOnClickListener {
-                                      val esc = et.text.toString()
+                              content.addView(TextView(this).apply{
+                                  text="Apply Changes"; gravity=Gravity.CENTER; setTextColor(cText)
+                                  setTextSize(TypedValue.COMPLEX_UNIT_SP,14f)
+                                  typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+                                  background=rip(accGlass(12f))
+                                  setOnClickListener{
+                                      val esc=et.text.toString()
                                           .replace("\\","\\\\").replace("'","\\'").replace("\n","\\n")
                                       webView?.evaluateJavascript(
-                                          "try{window.__wiSel&&(window.__wiSel.outerHTML='$esc')}catch(e){}", null
-                                      )
+                                          "try{window.__ws&&(window.__ws.outerHTML='$esc')}catch(e){}",null)
                                       toast("Applied!")
                                   }
-                              }, LinearLayout.LayoutParams(
-                                  LinearLayout.LayoutParams.MATCH_PARENT, dp(46f)
-                              ).apply { setMargins(0,dp(8f),0,0) })
+                              },LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(46f)).apply{setMargins(0,dp(8f),0,0)})
                           }
-                          1 -> content.addView(TextView(this).apply { // CSS
-                              text = css; setTextColor(Color.parseColor("#7FDBCA"))
+                          1->content.addView(TextView(this).apply{
+                              text=css; setTextColor(Color.parseColor("#7FDBCA"))
                               setTextSize(TypedValue.COMPLEX_UNIT_SP,11.5f)
-                              background = codeBackground(); typeface = Typeface.MONOSPACE
-                              setPadding(dp(12f),dp(12f),dp(12f),dp(12f))
-                              setTextIsSelectable(true)
+                              background=codeBg(); typeface=Typeface.MONOSPACE
+                              setPadding(dp(12f),dp(12f),dp(12f),dp(12f)); setTextIsSelectable(true)
                           })
-                          2 -> { // Preview
-                              val wv = WebView(this)
-                              wv.settings.javaScriptEnabled = true
+                          2->{
+                              val wv=WebView(this); wv.settings.javaScriptEnabled=true
                               wv.loadDataWithBaseURL(curUrl,
                                   "<html><body style='margin:10px;background:#fff'>$html</body></html>",
                                   "text/html","UTF-8",null)
-                              content.addView(wv, LinearLayout.LayoutParams(
-                                  LinearLayout.LayoutParams.MATCH_PARENT, dp(200f)
-                              ))
+                              content.addView(wv,LinearLayout.LayoutParams(
+                                  LinearLayout.LayoutParams.MATCH_PARENT,dp(200f)))
                           }
                       }
                   }
 
-                  listOf("HTML","CSS","Preview").forEachIndexed { i, name ->
-                      val tv = TextView(this).apply {
-                          text = name; gravity = Gravity.CENTER
+                  listOf("HTML","CSS","Preview").forEachIndexed{i,name->
+                      val tv=TextView(this).apply{
+                          text=name; gravity=Gravity.CENTER
                           setTextSize(TypedValue.COMPLEX_UNIT_SP,13f)
-                          typeface = Typeface.create("sans-serif-medium",Typeface.NORMAL)
-                          background = if (i==0) accentGlass(9f) else null
-                          setTextColor(if (i==0) cText else cText3)
+                          typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+                          background=if(i==0)accGlass(9f) else null
+                          setTextColor(if(i==0)cText else cText3)
                           setPadding(dp(4f),dp(3f),dp(4f),dp(3f))
-                          setOnClickListener { activeTab=i; selectTab(i) }
+                          setOnClickListener{cur=i;selTab(i)}
                       }
-                      tabViews.add(tv)
-                      tabBar.addView(tv, LinearLayout.LayoutParams(
-                          0, ViewGroup.LayoutParams.MATCH_PARENT, 1f
-                      ))
+                      tvs.add(tv)
+                      tabBar.addView(tv,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.MATCH_PARENT,1f))
                   }
-                  selectTab(0)
-                  slideUpPanel()
+                  selTab(0); panelUp()
               }
 
-              private fun chip(text: String, color: Int) = TextView(this).apply {
-                  this.text = text; setTextColor(color)
-                  setTextSize(TypedValue.COMPLEX_UNIT_SP,12f)
-                  typeface = Typeface.create("sans-serif-medium",Typeface.NORMAL)
-                  background = object : Drawable() {
-                      val p = Paint(Paint.ANTI_ALIAS_FLAG)
-                      override fun draw(c: Canvas) {
-                          val r = bounds.height()/2f
-                          p.color = Color.argb(30,Color.red(color),Color.green(color),Color.blue(color))
+              private fun chip(text:String,color:Int)=TextView(this).apply{
+                  this.text=text; setTextColor(color); setTextSize(TypedValue.COMPLEX_UNIT_SP,12f)
+                  typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+                  background=object:Drawable(){
+                      val p=Paint(Paint.ANTI_ALIAS_FLAG)
+                      override fun draw(c:Canvas){
+                          val r=bounds.height()/2f
+                          p.color=Color.argb(30,Color.red(color),Color.green(color),Color.blue(color))
                           c.drawRoundRect(RectF(bounds),r,r,p)
-                          p.color = Color.argb(70,Color.red(color),Color.green(color),Color.blue(color))
+                          p.color=Color.argb(70,Color.red(color),Color.green(color),Color.blue(color))
                           p.style=Paint.Style.STROKE; p.strokeWidth=dp(0.6f).toFloat()
                           c.drawRoundRect(RectF(bounds),r,r,p); p.style=Paint.Style.FILL
                       }
-                      override fun setAlpha(a: Int) {}
-                      override fun setColorFilter(f: ColorFilter?) {}
-                      @Suppress("OVERRIDE_DEPRECATION")
-                      override fun getOpacity() = PixelFormat.TRANSLUCENT
+                      override fun setAlpha(a:Int){}; override fun setColorFilter(f:ColorFilter?){}
+                      @Suppress("OVERRIDE_DEPRECATION") override fun getOpacity()=PixelFormat.TRANSLUCENT
                   }
                   setPadding(dp(10f),dp(4f),dp(10f),dp(4f))
-                  layoutParams = LinearLayout.LayoutParams(
-                      ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-                  ).apply { setMargins(0,0,dp(6f),0) }
-              }
-
-              private fun codeBackground(): Drawable = object : Drawable() {
-                  val p = Paint(Paint.ANTI_ALIAS_FLAG)
-                  override fun draw(c: Canvas) {
-                      val r = dp(12f).toFloat()
-                      p.color = Color.parseColor("#0D1117")
-                      c.drawRoundRect(RectF(bounds),r,r,p)
-                      p.color = Color.parseColor("#20FFFFFF"); p.style=Paint.Style.STROKE
-                      p.strokeWidth=dp(0.5f).toFloat()
-                      c.drawRoundRect(RectF(bounds),r,r,p); p.style=Paint.Style.FILL
-                  }
-                  override fun setAlpha(a: Int) {}
-                  override fun setColorFilter(f: ColorFilter?) {}
-                  @Suppress("OVERRIDE_DEPRECATION")
-                  override fun getOpacity() = PixelFormat.TRANSLUCENT
+                  layoutParams=LinearLayout.LayoutParams(
+                      ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT
+                  ).apply{setMargins(0,0,dp(6f),0)}
               }
 
               // ══════════════════════════════════════════════════════════
-              //  SETTINGS
+              //  Settings
               // ══════════════════════════════════════════════════════════
               private fun showSettings() {
-                  val d = Dialog(this, android.R.style.Theme_NoTitleBar_Fullscreen)
-                  val overlay = FrameLayout(this).apply {
+                  val d=Dialog(this,android.R.style.Theme_NoTitleBar_Fullscreen)
+                  val overlay=FrameLayout(this).apply{
                       setBackgroundColor(Color.parseColor("#88000000"))
-                      setOnClickListener { d.dismiss() }
+                      setOnClickListener{d.dismiss()}
                   }
-
-                  val sheetScroll = ScrollView(this)
-                  val sheet = LinearLayout(this).apply {
-                      orientation = LinearLayout.VERTICAL
-                      background = glass(28f)
-                      setPadding(dp(20f),dp(8f),dp(20f),dp(36f))
-                      elevation = dp(24f).toFloat()
-                      setOnClickListener {}
+                  val sv=ScrollView(this)
+                  val sheet=LinearLayout(this).apply{
+                      orientation=LinearLayout.VERTICAL; background=glass(28f)
+                      setPadding(dp(20f),dp(8f),dp(20f),dp(36f)); elevation=dp(24f).toFloat()
+                      setOnClickListener{}
                   }
-
-                  // Handle
-                  sheet.addView(View(this).apply {
-                      background = GradientDrawable().apply {
-                          setColor(Color.parseColor("#40FFFFFF")); cornerRadius = dp(2f).toFloat()
-                      }
-                  }, LinearLayout.LayoutParams(dp(36f),dp(4f)).apply {
-                      gravity = Gravity.CENTER_HORIZONTAL; setMargins(0,dp(8f),0,dp(16f))
-                  }.also { (it as LinearLayout.LayoutParams).gravity = Gravity.CENTER_HORIZONTAL })
+                  // handle
+                  sheet.addView(View(this).apply{
+                      background=GradientDrawable().apply{setColor(Color.parseColor("#40FFFFFF"));cornerRadius=dp(2f).toFloat()}
+                  },LinearLayout.LayoutParams(dp(36f),dp(4f)).apply{
+                      gravity=Gravity.CENTER_HORIZONTAL;setMargins(0,dp(8f),0,dp(16f))
+                  }.also{(it as LinearLayout.LayoutParams).gravity=Gravity.CENTER_HORIZONTAL})
 
                   // Title
-                  sheet.addView(row(ico(Ic.SETTINGS,20,cAccent), "Settings", 20f, cText, bold=true))
-                  sheet.addView(divider())
+                  sheet.addView(LinearLayout(this).apply{
+                      orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL
+                      addView(ImageView(this@MainActivity).apply{setImageBitmap(ico(Ic.GEAR,20,cAcc))},
+                          LinearLayout.LayoutParams(dp(24f),dp(24f)))
+                      addView(TextView(this@MainActivity).apply{
+                          text="  Settings"; setTextColor(cText); setTextSize(TypedValue.COMPLEX_UNIT_SP,20f)
+                          typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+                      })
+                  })
+                  sheet.addView(div())
 
-                  // UI Toggle
-                  sheet.addView(sectionLabel("Browser Mode"))
-                  var uiOn = getShowUi()
-                  val toggleRow = buildToggleRow(
-                      Ic.INSPECT,"Show Inspector Tools",
-                      "Hide toolbar for pure browser mode", uiOn
-                  ) { on ->
-                      uiOn = on
-                      prefs?.edit()?.putBoolean(P_SHOW_UI,on)?.apply()
-                      applyUi()
-                  }
-                  sheet.addView(toggleRow)
-                  sheet.addView(divider())
+                  // UI toggle
+                  sheet.addView(secLabel("Browser Mode"))
+                  var uiOn=showUi()
+                  sheet.addView(togRow(Ic.INSPECT,"Show Inspector Tools",
+                      "Disable for pure browser mode",uiOn){on->
+                      uiOn=on; prefs?.edit()?.putBoolean(P_UI,on)?.apply(); applyUi()
+                  })
+                  sheet.addView(div())
 
                   // Search engine
-                  sheet.addView(sectionLabel("Search Engine"))
-                  val engines = listOf(
-                      EG to "Google", EY to "Yandex",
-                      EB to "Bing", ED to "DuckDuckGo", EBR to "Brave"
-                  )
-                  val cur = getEngine()
-                  val engineRowViews = mutableListOf<LinearLayout>()
-                  engines.forEach { (key, name) ->
-                      val r = engineRow(name, key == cur) {
-                          prefs?.edit()?.putString(P_ENGINE,key)?.apply()
-                          engineRowViews.forEach { rv ->
-                              val k = rv.getTag() as? String ?: return@forEach
-                              val tv = rv.getChildAt(1) as? TextView
-                              val iv = rv.getChildAt(2) as? ImageView
-                              tv?.setTextColor(if (k==key) cAccent else cText2)
-                              iv?.setImageBitmap(ico(Ic.CHECK,16,if(k==key) cAccent else Color.TRANSPARENT))
+                  sheet.addView(secLabel("Search Engine"))
+                  val engs=listOf(EG to "Google",EY to "Yandex",EB to "Bing",ED to "DuckDuckGo",EBR to "Brave")
+                  val curEng=eng(); val eRows= mutableListOf<LinearLayout>()
+                  engs.forEach{(key,name)->
+                      val r=engRow(name,key==curEng){
+                          prefs?.edit()?.putString(P_ENG,key)?.apply()
+                          eRows.forEach{rv->
+                              val k=rv.tag as? String?:return@forEach
+                              (rv.getChildAt(1) as? TextView)?.setTextColor(if(k==key)cAcc else cText2)
+                              (rv.getChildAt(2) as? ImageView)?.setImageBitmap(
+                                  ico(Ic.CHECK,16,if(k==key)cAcc else Color.TRANSPARENT))
                           }
                       }
-                      r.tag = key
-                      engineRowViews.add(r)
-                      sheet.addView(r)
+                      r.tag=key; eRows.add(r); sheet.addView(r)
                   }
-                  sheet.addView(divider())
-                  sheet.addView(TextView(this).apply {
-                      text = "WebInspector 1.0  ·  iOS 26 Glass"
-                      setTextColor(cText3); setTextSize(TypedValue.COMPLEX_UNIT_SP,11f)
+                  sheet.addView(div())
+                  sheet.addView(TextView(this).apply{
+                      text="WebInspector 1.0"; setTextColor(cText3); setTextSize(TypedValue.COMPLEX_UNIT_SP,11f)
                       setPadding(0,dp(8f),0,0)
                   })
 
-                  sheetScroll.addView(sheet)
-                  val h = (resources.displayMetrics.heightPixels * 0.80).toInt()
-                  overlay.addView(sheetScroll, FrameLayout.LayoutParams(
-                      FrameLayout.LayoutParams.MATCH_PARENT, h, Gravity.BOTTOM
-                  ).apply { setMargins(dp(6f),0,dp(6f),0) })
-
+                  sv.addView(sheet)
+                  val h=(resources.displayMetrics.heightPixels*0.80).toInt()
+                  overlay.addView(sv,FrameLayout.LayoutParams(
+                      FrameLayout.LayoutParams.MATCH_PARENT,h,Gravity.BOTTOM
+                  ).apply{setMargins(dp(6f),0,dp(6f),0)})
                   d.setContentView(overlay); d.show()
-                  sheetScroll.translationY = h.toFloat()
-                  sheetScroll.animate().translationY(0f).setDuration(360)
-                      .setInterpolator(DecelerateInterpolator(2.5f)).start()
+                  sv.translationY=h.toFloat()
+                  sv.animate().translationY(0f).setDuration(360).setInterpolator(DecelerateInterpolator(2.5f)).start()
               }
 
-              private fun row(bmp: Bitmap, text: String, sp: Float, col: Int, bold: Boolean=false): LinearLayout {
-                  return LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-                      addView(ImageView(this@MainActivity).apply { setImageBitmap(bmp) },
-                          LinearLayout.LayoutParams(dp(24f),dp(24f)).apply { setMargins(0,0,dp(10f),0) })
-                      addView(TextView(this@MainActivity).apply {
-                          text = text; setTextColor(col); setTextSize(TypedValue.COMPLEX_UNIT_SP, sp)
-                          if (bold) typeface = Typeface.create("sans-serif-medium",Typeface.NORMAL)
-                      })
-                  }
-              }
-
-              private fun sectionLabel(t: String) = TextView(this).apply {
-                  text = t; setTextColor(cText3); setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                  typeface = Typeface.create("sans-serif-medium",Typeface.NORMAL)
+              private fun secLabel(t:String)=TextView(this).apply{
+                  text=t; setTextColor(cText3); setTextSize(TypedValue.COMPLEX_UNIT_SP,12f)
+                  typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
                   setPadding(0,dp(12f),0,dp(4f))
               }
 
-              private fun divider() = View(this).apply {
+              private fun div()=View(this).apply{
                   setBackgroundColor(Color.parseColor("#1EFFFFFF"))
-                  layoutParams = LinearLayout.LayoutParams(
-                      LinearLayout.LayoutParams.MATCH_PARENT, 1
-                  ).apply { setMargins(0,dp(6f),0,dp(6f)) }
+                  layoutParams=LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT,1).apply{setMargins(0,dp(6f),0,dp(6f))}
               }
 
-              private fun buildToggleRow(
-                  ic: Ic, title: String, sub: String, init: Boolean, cb: (Boolean)->Unit
-              ): LinearLayout {
-                  var state = init
-                  val track = GradientDrawable().apply {
-                      setColor(if (state) cAccent else Color.parseColor("#38FFFFFF"))
-                      cornerRadius = dp(14f).toFloat()
+              private fun togRow(ic:Ic,title:String,sub:String,init:Boolean,cb:(Boolean)->Unit):LinearLayout {
+                  var st=init
+                  val track=GradientDrawable().apply{
+                      setColor(if(st)cAcc else Color.parseColor("#38FFFFFF")); cornerRadius=dp(14f).toFloat()}
+                  val thumb=View(this).apply{
+                      background=GradientDrawable().apply{setColor(Color.WHITE);cornerRadius=dp(11f).toFloat()
+                          setStroke(1,Color.parseColor("#15000000"))}
+                      elevation=dp(2f).toFloat()
                   }
-                  val thumb = View(this).apply {
-                      background = GradientDrawable().apply {
-                          setColor(Color.WHITE); cornerRadius = dp(11f).toFloat()
-                          setStroke(1, Color.parseColor("#15000000"))
-                      }
-                      elevation = dp(2f).toFloat()
+                  val tog=FrameLayout(this).apply{
+                      background=track
+                      addView(thumb,FrameLayout.LayoutParams(dp(22f),dp(28f),Gravity.CENTER_VERTICAL).apply{
+                          setMargins(if(st)dp(24f) else dp(3f),0,0,0)})
                   }
-                  val toggleView = FrameLayout(this).apply {
-                      background = track
-                      addView(thumb, FrameLayout.LayoutParams(dp(22f),dp(22f),Gravity.CENTER_VERTICAL).apply {
-                          setMargins(if (state) dp(24f) else dp(3f), 0, 0, 0)
-                      })
-                  }
-
-                  val doToggle = {
-                      state = !state
-                      track.setColor(if (state) cAccent else Color.parseColor("#38FFFFFF"))
-                      val toM = if (state) dp(24f) else dp(3f)
-                      thumb.animate().translationX((toM - thumb.left).toFloat()).setDuration(200)
-                          .setInterpolator(DecelerateInterpolator(2f)).withEndAction {
-                              (thumb.layoutParams as FrameLayout.LayoutParams).setMargins(toM,0,0,0)
-                              thumb.translationX = 0f
-                              thumb.requestLayout()
-                          }.start()
-                      cb(state)
-                  }
-
-                  return LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                  return LinearLayout(this).apply{
+                      orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL
                       setPadding(0,dp(10f),0,dp(10f))
-                      background = ripple(ColorDrawable(Color.TRANSPARENT))
-                      setOnClickListener { doToggle() }
-                      addView(ImageView(this@MainActivity).apply {
-                          setImageBitmap(ico(ic,20,cText2))
-                      }, LinearLayout.LayoutParams(dp(22f),dp(22f)).apply { setMargins(0,0,dp(14f),0) })
-                      val col = LinearLayout(this@MainActivity).apply {
-                          orientation = LinearLayout.VERTICAL
-                          addView(TextView(this@MainActivity).apply {
-                              text = title; setTextColor(cText2); setTextSize(TypedValue.COMPLEX_UNIT_SP,15f)
-                          })
-                          addView(TextView(this@MainActivity).apply {
-                              text = sub; setTextColor(cText3); setTextSize(TypedValue.COMPLEX_UNIT_SP,12f)
-                          })
+                      background=rip(ColorDrawable(Color.TRANSPARENT))
+                      setOnClickListener{
+                          st=!st; track.setColor(if(st)cAcc else Color.parseColor("#38FFFFFF"))
+                          val toM=if(st)dp(24f) else dp(3f)
+                          thumb.animate().translationX((toM-thumb.left).toFloat()).setDuration(200)
+                              .setInterpolator(DecelerateInterpolator(2f)).withEndAction{
+                                  (thumb.layoutParams as FrameLayout.LayoutParams).setMargins(toM,0,0,0)
+                                  thumb.translationX=0f; thumb.requestLayout()}.start()
+                          cb(st)
                       }
-                      addView(col, LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f))
-                      addView(toggleView, LinearLayout.LayoutParams(dp(48f),dp(28f)))
+                      addView(ImageView(this@MainActivity).apply{setImageBitmap(ico(ic,20,cText2))},
+                          LinearLayout.LayoutParams(dp(22f),dp(22f)).apply{setMargins(0,0,dp(14f),0)})
+                      addView(LinearLayout(this@MainActivity).apply{
+                          orientation=LinearLayout.VERTICAL
+                          addView(TextView(this@MainActivity).apply{text=title;setTextColor(cText2);setTextSize(TypedValue.COMPLEX_UNIT_SP,15f)})
+                          addView(TextView(this@MainActivity).apply{text=sub;setTextColor(cText3);setTextSize(TypedValue.COMPLEX_UNIT_SP,12f)})
+                      },LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f))
+                      addView(tog,LinearLayout.LayoutParams(dp(48f),dp(28f)))
                   }
               }
 
-              private fun engineRow(name: String, selected: Boolean, cb: ()->Unit): LinearLayout {
-                  return LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-                      setPadding(0,dp(11f),0,dp(11f))
-                      background = ripple(ColorDrawable(Color.TRANSPARENT))
-                      setOnClickListener { cb() }
-                      addView(ImageView(this@MainActivity).apply {
-                          setImageBitmap(ico(Ic.GLOBE,18,cText3))
-                      }, LinearLayout.LayoutParams(dp(22f),dp(22f)).apply { setMargins(0,0,dp(14f),0) })
-                      addView(TextView(this@MainActivity).apply {
-                          text = name
-                          setTextColor(if (selected) cAccent else cText2)
-                          setTextSize(TypedValue.COMPLEX_UNIT_SP,15f)
-                      }, LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f))
-                      addView(ImageView(this@MainActivity).apply {
-                          setImageBitmap(ico(Ic.CHECK,16,if (selected) cAccent else Color.TRANSPARENT))
-                      }, LinearLayout.LayoutParams(dp(20f),dp(20f)))
-                  }
+              private fun engRow(name:String,sel:Boolean,cb:()->Unit)=LinearLayout(this).apply{
+                  orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL
+                  setPadding(0,dp(11f),0,dp(11f)); background=rip(ColorDrawable(Color.TRANSPARENT))
+                  setOnClickListener{cb()}
+                  addView(ImageView(this@MainActivity).apply{setImageBitmap(ico(Ic.GLOBE,18,cText3))},
+                      LinearLayout.LayoutParams(dp(22f),dp(22f)).apply{setMargins(0,0,dp(14f),0)})
+                  addView(TextView(this@MainActivity).apply{text=name
+                      setTextColor(if(sel)cAcc else cText2);setTextSize(TypedValue.COMPLEX_UNIT_SP,15f)
+                  },LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f))
+                  addView(ImageView(this@MainActivity).apply{
+                      setImageBitmap(ico(Ic.CHECK,16,if(sel)cAcc else Color.TRANSPARENT))
+                  },LinearLayout.LayoutParams(dp(20f),dp(20f)))
               }
 
               // ══════════════════════════════════════════════════════════
-              //  SOURCE
+              //  Source
               // ══════════════════════════════════════════════════════════
-              private fun showSource() {
-                  webView?.evaluateJavascript(
-                      "(function(){return document.documentElement.outerHTML})();"
-                  ) { res ->
-                      val html = res?.removeSurrounding("\"")
-                          ?.replace("\\n","\n")?.replace("\\t","\t")?.replace("\\\"","\"") ?: ""
-                      showCodeSheet("Page Source", html)
+              private fun showSrc() {
+                  webView?.evaluateJavascript("(function(){return document.documentElement.outerHTML})();"){res->
+                      val html=res?.removeSurrounding("\"")
+                          ?.replace("\\n","\n")?.replace("\\t","\t")?.replace("\\\"","\"")?:""
+                      showCode("Page Source",html)
                   }
               }
 
-              private fun showCodeSheet(title: String, code: String) {
-                  val d = Dialog(this, android.R.style.Theme_NoTitleBar_Fullscreen)
-                  val overlay = FrameLayout(this).apply {
-                      setBackgroundColor(Color.parseColor("#88000000"))
-                      setOnClickListener { d.dismiss() }
-                  }
-                  val sheet = LinearLayout(this).apply {
-                      orientation = LinearLayout.VERTICAL
-                      background = glass(28f)
-                      setPadding(dp(16f),dp(14f),dp(16f),dp(20f))
-                      elevation = dp(20f).toFloat()
-                      setOnClickListener {}
-                  }
-                  val hdr = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-                  }
-                  hdr.addView(TextView(this).apply {
-                      text = title; setTextColor(cText); setTextSize(TypedValue.COMPLEX_UNIT_SP,17f)
-                      typeface = Typeface.create("sans-serif-medium",Typeface.NORMAL)
-                  }, LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f))
-                  hdr.addView(icoView(Ic.DOWNLOAD,20,cAccent,8).apply {
-                      setOnClickListener { saveFile("source.html",code); d.dismiss() }
-                  }, LinearLayout.LayoutParams(dp(38f),dp(38f)))
-                  hdr.addView(icoView(Ic.CLOSE,18,cText3,8).apply {
-                      setOnClickListener { d.dismiss() }
-                  }, LinearLayout.LayoutParams(dp(38f),dp(38f)))
+              private fun showCode(title:String,code:String) {
+                  val d=Dialog(this,android.R.style.Theme_NoTitleBar_Fullscreen)
+                  val overlay=FrameLayout(this).apply{setBackgroundColor(Color.parseColor("#88000000"));setOnClickListener{d.dismiss()}}
+                  val sheet=LinearLayout(this).apply{
+                      orientation=LinearLayout.VERTICAL; background=glass(28f)
+                      setPadding(dp(16f),dp(14f),dp(16f),dp(20f)); elevation=dp(20f).toFloat(); setOnClickListener{}}
+                  val hdr=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL}
+                  hdr.addView(TextView(this).apply{text=title;setTextColor(cText);setTextSize(TypedValue.COMPLEX_UNIT_SP,17f)
+                      typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+                  },LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f))
+                  hdr.addView(icoBtn(Ic.DL,20,cAcc,8).apply{setOnClickListener{saveF("source.html",code);d.dismiss()}},
+                      LinearLayout.LayoutParams(dp(38f),dp(38f)))
+                  hdr.addView(icoBtn(Ic.X,18,cText3,8).apply{setOnClickListener{d.dismiss()}},
+                      LinearLayout.LayoutParams(dp(38f),dp(38f)))
                   sheet.addView(hdr)
-                  sheet.addView(TextView(this).apply {
-                      text = "${code.lines().size} lines · ${code.length} chars"
-                      setTextColor(cText3); setTextSize(TypedValue.COMPLEX_UNIT_SP,11f)
-                      setPadding(0,dp(4f),0,dp(10f))
-                  })
-                  val sv = ScrollView(this)
-                  val hsv = HorizontalScrollView(this)
-                  hsv.addView(TextView(this).apply {
-                      text = code; setTextColor(Color.parseColor("#E2E8F0"))
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP,11f); typeface = Typeface.MONOSPACE
+                  sheet.addView(TextView(this).apply{text="${code.lines().size} lines · ${code.length} chars"
+                      setTextColor(cText3);setTextSize(TypedValue.COMPLEX_UNIT_SP,11f);setPadding(0,dp(4f),0,dp(10f))})
+                  val sv=ScrollView(this); val hsv=HorizontalScrollView(this)
+                  hsv.addView(TextView(this).apply{text=code;setTextColor(Color.parseColor("#E2E8F0"))
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP,11f);typeface=Typeface.MONOSPACE
                       setBackgroundColor(Color.parseColor("#0D1117"))
-                      setPadding(dp(12f),dp(12f),dp(12f),dp(12f)); setTextIsSelectable(true)
-                  })
-                  sv.addView(hsv)
-                  sheet.addView(sv, LinearLayout.LayoutParams(
-                      LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
-                  ))
-                  val h = (resources.displayMetrics.heightPixels * 0.86).toInt()
-                  overlay.addView(sheet, FrameLayout.LayoutParams(
-                      FrameLayout.LayoutParams.MATCH_PARENT, h, Gravity.BOTTOM
-                  ).apply { setMargins(dp(6f),0,dp(6f),0) })
-                  d.setContentView(overlay); d.show()
-                  sheet.translationY = h.toFloat()
-                  sheet.animate().translationY(0f).setDuration(370)
-                      .setInterpolator(DecelerateInterpolator(2.5f)).start()
+                      setPadding(dp(12f),dp(12f),dp(12f),dp(12f));setTextIsSelectable(true)})
+                  sv.addView(hsv); sheet.addView(sv,LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,0,1f))
+                  val h=(resources.displayMetrics.heightPixels*0.86).toInt()
+                  overlay.addView(sheet,FrameLayout.LayoutParams(
+                      FrameLayout.LayoutParams.MATCH_PARENT,h,Gravity.BOTTOM).apply{setMargins(dp(6f),0,dp(6f),0)})
+                  d.setContentView(overlay);d.show()
+                  sheet.translationY=h.toFloat()
+                  sheet.animate().translationY(0f).setDuration(370).setInterpolator(DecelerateInterpolator(2.5f)).start()
               }
 
               // ══════════════════════════════════════════════════════════
-              //  FILES
+              //  Files
               // ══════════════════════════════════════════════════════════
               private fun showFiles() {
                   webView?.evaluateJavascript("""
-                      (function(){
-                          var r={js:[],css:[],img:[]};
-                          document.querySelectorAll('script[src]').forEach(function(s){r.js.push(s.src);});
-                          document.querySelectorAll('link[rel=stylesheet]').forEach(function(l){r.css.push(l.href);});
-                          document.querySelectorAll('img[src]').forEach(function(i){r.img.push(i.src);});
-                          return JSON.stringify(r);
-                      })();
-                  """.trimIndent()) { res ->
-                      val json = res?.removeSurrounding("\"")?.replace("\\\"","\"") ?: "{}"
+                      (function(){var r={js:[],css:[],img:[]};
+                      document.querySelectorAll('script[src]').forEach(function(s){r.js.push(s.src);});
+                      document.querySelectorAll('link[rel=stylesheet]').forEach(function(l){r.css.push(l.href);});
+                      document.querySelectorAll('img[src]').forEach(function(i){r.img.push(i.src);});
+                      return JSON.stringify(r);})();
+                  """.trimIndent()){res->
+                      val json=res?.removeSurrounding("\"")?.replace("\\\"","\"")?:"{}"
                       showFilesSheet(json)
                   }
               }
 
-              private fun showFilesSheet(json: String) {
-                  val sections = mutableListOf<Pair<String,List<String>>>()
-                  listOf("js" to "Scripts","css" to "Styles","img" to "Images").forEach { (k,label) ->
-                      val m = Regex(""""$k":\[([^\]]*)]""").find(json)
-                      if (m != null) {
-                          val urls = Regex(""""(https?://[^"]+)"""").findAll(m.groupValues[1])
-                              .map { it.groupValues[1] }.toList()
-                          if (urls.isNotEmpty()) sections.add(label to urls)
+              private fun showFilesSheet(json:String) {
+                  val secs= mutableListOf<Pair<String,List<String>>>()
+                  listOf("js" to "Scripts","css" to "Styles","img" to "Images").forEach{(k,lbl)->
+                      val m=Regex(""""$k":\[([^\]]*)]""").find(json)
+                      if(m!=null){
+                          val urls=Regex(""""(https?://[^"]+)"""").findAll(m.groupValues[1])
+                              .map{it.groupValues[1]}.toList()
+                          if(urls.isNotEmpty())secs.add(lbl to urls)
                       }
                   }
-                  val allUrls = sections.flatMap { it.second }
-
-                  val d = Dialog(this, android.R.style.Theme_NoTitleBar_Fullscreen)
-                  val overlay = FrameLayout(this).apply {
-                      setBackgroundColor(Color.parseColor("#88000000"))
-                      setOnClickListener { d.dismiss() }
-                  }
-                  val sheet = LinearLayout(this).apply {
-                      orientation = LinearLayout.VERTICAL
-                      background = glass(28f)
-                      setPadding(dp(16f),dp(14f),dp(16f),dp(20f))
-                      elevation = dp(20f).toFloat()
-                      setOnClickListener {}
-                  }
-                  val hdr = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-                  }
-                  hdr.addView(TextView(this).apply {
-                      text = "Site Files"; setTextColor(cText); setTextSize(TypedValue.COMPLEX_UNIT_SP,18f)
-                      typeface = Typeface.create("sans-serif-medium",Typeface.NORMAL)
-                  }, LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f))
-                  hdr.addView(icoView(Ic.CLOSE,18,cText3,8).apply {
-                      setOnClickListener { d.dismiss() }
-                  }, LinearLayout.LayoutParams(dp(38f),dp(38f)))
+                  val allUrls=secs.flatMap{it.second}
+                  val d=Dialog(this,android.R.style.Theme_NoTitleBar_Fullscreen)
+                  val overlay=FrameLayout(this).apply{setBackgroundColor(Color.parseColor("#88000000"));setOnClickListener{d.dismiss()}}
+                  val sheet=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;background=glass(28f)
+                      setPadding(dp(16f),dp(14f),dp(16f),dp(20f));elevation=dp(20f).toFloat();setOnClickListener{}}
+                  val hdr=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL}
+                  hdr.addView(TextView(this).apply{text="Site Files";setTextColor(cText);setTextSize(TypedValue.COMPLEX_UNIT_SP,18f)
+                      typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+                  },LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f))
+                  hdr.addView(icoBtn(Ic.X,18,cText3,8).apply{setOnClickListener{d.dismiss()}},
+                      LinearLayout.LayoutParams(dp(38f),dp(38f)))
                   sheet.addView(hdr)
-                  sheet.addView(TextView(this).apply {
-                      text = "${allUrls.size} resources · tap to view"
-                      setTextColor(cText3); setTextSize(TypedValue.COMPLEX_UNIT_SP,11f)
-                      setPadding(0,dp(4f),0,dp(8f))
-                  })
-
-                  val sv = ScrollView(this)
-                  val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-                  sections.forEach { (label, urls) ->
-                      list.addView(TextView(this).apply {
-                          text = label.uppercase(); setTextColor(cAccent)
+                  sheet.addView(TextView(this).apply{text="${allUrls.size} resources";setTextColor(cText3)
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP,11f);setPadding(0,dp(4f),0,dp(8f))})
+                  val sv=ScrollView(this); val list=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
+                  secs.forEach{(lbl,urls)->
+                      list.addView(TextView(this).apply{text=lbl.uppercase();setTextColor(cAcc)
                           setTextSize(TypedValue.COMPLEX_UNIT_SP,10.5f)
-                          typeface = Typeface.create("sans-serif-medium",Typeface.NORMAL)
-                          setPadding(dp(2f),dp(12f),0,dp(4f))
-                      })
-                      urls.forEach { url ->
-                          val fileIc = if (url.endsWith(".js")) Ic.CODE else if (url.endsWith(".css")) Ic.STAR else Ic.DOWNLOAD
-                          list.addView(LinearLayout(this).apply {
-                              orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-                              background = ripple(object : Drawable() {
-                                  val p = Paint(Paint.ANTI_ALIAS_FLAG)
-                                  override fun draw(c: Canvas) {
-                                      p.color = Color.parseColor("#12FFFFFF")
-                                      c.drawRoundRect(RectF(bounds),dp(10f).toFloat(),dp(10f).toFloat(),p)
-                                  }
-                                  override fun setAlpha(a: Int) {}
-                                  override fun setColorFilter(f: ColorFilter?) {}
-                                  @Suppress("OVERRIDE_DEPRECATION")
-                                  override fun getOpacity() = PixelFormat.TRANSLUCENT
+                          typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+                          setPadding(dp(2f),dp(12f),0,dp(4f))})
+                      urls.forEach{url->
+                          val fIc=if(url.endsWith(".js"))Ic.CODE else if(url.endsWith(".css"))Ic.STAR else Ic.DL
+                          list.addView(LinearLayout(this).apply{
+                              orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
+                              background=rip(object:Drawable(){
+                                  val p=Paint(Paint.ANTI_ALIAS_FLAG)
+                                  override fun draw(c:Canvas){p.color=Color.parseColor("#12FFFFFF")
+                                      c.drawRoundRect(RectF(bounds),dp(10f).toFloat(),dp(10f).toFloat(),p)}
+                                  override fun setAlpha(a:Int){}; override fun setColorFilter(f:ColorFilter?){}
+                                  @Suppress("OVERRIDE_DEPRECATION") override fun getOpacity()=PixelFormat.TRANSLUCENT
                               })
                               setPadding(dp(10f),dp(9f),dp(10f),dp(9f))
-                              setOnClickListener { showCodeSheet(url.substringAfterLast("/"), url) }
-                              addView(ImageView(this@MainActivity).apply {
-                                  setImageBitmap(ico(fileIc,15,cText3))
-                              }, LinearLayout.LayoutParams(dp(20f),dp(20f)).apply { setMargins(0,0,dp(10f),0) })
-                              addView(LinearLayout(this@MainActivity).apply {
-                                  orientation = LinearLayout.VERTICAL
-                                  addView(TextView(this@MainActivity).apply {
-                                      text = url.substringAfterLast("/").take(42)
-                                      setTextColor(cText2); setTextSize(TypedValue.COMPLEX_UNIT_SP,12.5f)
-                                  })
-                                  addView(TextView(this@MainActivity).apply {
-                                      text = url.substringAfter("://").substringBefore("/")
-                                      setTextColor(cText3); setTextSize(TypedValue.COMPLEX_UNIT_SP,10.5f)
-                                  })
-                              }, LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f))
-                              addView(icoView(Ic.DOWNLOAD,14,cText3,4).apply {
-                                  setOnClickListener { dlFile(url) }
-                              }, LinearLayout.LayoutParams(dp(24f),dp(24f)))
-                          }, LinearLayout.LayoutParams(
-                              LinearLayout.LayoutParams.MATCH_PARENT,
-                              ViewGroup.LayoutParams.WRAP_CONTENT
-                          ).apply { setMargins(0,dp(2f),0,dp(2f)) })
+                              setOnClickListener{showCode(url.substringAfterLast("/"),url)}
+                              addView(ImageView(this@MainActivity).apply{setImageBitmap(ico(fIc,15,cText3))},
+                                  LinearLayout.LayoutParams(dp(20f),dp(20f)).apply{setMargins(0,0,dp(10f),0)})
+                              addView(LinearLayout(this@MainActivity).apply{
+                                  orientation=LinearLayout.VERTICAL
+                                  addView(TextView(this@MainActivity).apply{text=url.substringAfterLast("/").take(42)
+                                      setTextColor(cText2);setTextSize(TypedValue.COMPLEX_UNIT_SP,12.5f)})
+                                  addView(TextView(this@MainActivity).apply{text=url.substringAfter("://").substringBefore("/")
+                                      setTextColor(cText3);setTextSize(TypedValue.COMPLEX_UNIT_SP,10.5f)})
+                              },LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f))
+                              addView(icoBtn(Ic.DL,14,cText3,4).apply{setOnClickListener{dlFile(url)}},
+                                  LinearLayout.LayoutParams(dp(24f),dp(24f)))
+                          },LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                              ViewGroup.LayoutParams.WRAP_CONTENT).apply{setMargins(0,dp(2f),0,dp(2f))})
                       }
                   }
-                  sv.addView(list)
-                  sheet.addView(sv, LinearLayout.LayoutParams(
-                      LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
-                  ))
-                  sheet.addView(TextView(this).apply {
-                      text = "↓  Download ZIP"
-                      gravity = Gravity.CENTER; setTextColor(cText)
+                  sv.addView(list); sheet.addView(sv,LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,0,1f))
+                  sheet.addView(TextView(this).apply{text="↓  Download ZIP";gravity=Gravity.CENTER;setTextColor(cText)
                       setTextSize(TypedValue.COMPLEX_UNIT_SP,14f)
-                      typeface = Typeface.create("sans-serif-medium",Typeface.NORMAL)
-                      background = ripple(accentGlass(14f))
-                      setOnClickListener { d.dismiss(); dlZip(allUrls) }
-                  }, LinearLayout.LayoutParams(
-                      LinearLayout.LayoutParams.MATCH_PARENT, dp(50f)
-                  ).apply { setMargins(0,dp(12f),0,0) })
-
-                  val h = (resources.displayMetrics.heightPixels * 0.86).toInt()
-                  overlay.addView(sheet, FrameLayout.LayoutParams(
-                      FrameLayout.LayoutParams.MATCH_PARENT, h, Gravity.BOTTOM
-                  ).apply { setMargins(dp(6f),0,dp(6f),0) })
-                  d.setContentView(overlay); d.show()
-                  sheet.translationY = h.toFloat()
-                  sheet.animate().translationY(0f).setDuration(370)
-                      .setInterpolator(DecelerateInterpolator(2.5f)).start()
+                      typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+                      background=rip(accGlass(14f)); setOnClickListener{d.dismiss();dlZip(allUrls)}
+                  },LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(50f)).apply{setMargins(0,dp(12f),0,0)})
+                  val h=(resources.displayMetrics.heightPixels*0.86).toInt()
+                  overlay.addView(sheet,FrameLayout.LayoutParams(
+                      FrameLayout.LayoutParams.MATCH_PARENT,h,Gravity.BOTTOM).apply{setMargins(dp(6f),0,dp(6f),0)})
+                  d.setContentView(overlay);d.show()
+                  sheet.translationY=h.toFloat()
+                  sheet.animate().translationY(0f).setDuration(370).setInterpolator(DecelerateInterpolator(2.5f)).start()
               }
 
-              // ══════════════════════════════════════════════════════════
-              //  DOWNLOAD
-              // ══════════════════════════════════════════════════════════
-              private fun dlFile(url: String) {
+              private fun dlFile(url:String){
                   toast("Downloading…")
-                  scope.launch(Dispatchers.IO) {
-                      try {
-                          val conn = URL(url).openConnection() as HttpURLConnection
-                          conn.connectTimeout = 8000; conn.readTimeout = 8000; conn.connect()
-                          if (conn.responseCode == 200) {
-                              val name = url.substringAfterLast("/").take(80).ifEmpty { "file" }
-                              val f = File(getExternalFilesDir(null) ?: filesDir, name)
-                              f.outputStream().use { conn.inputStream.copyTo(it) }
-                              withContext(Dispatchers.Main) { toast("Saved: ${f.name}") }
+                  scope.launch(Dispatchers.IO){
+                      try{
+                          val conn=URL(url).openConnection() as HttpURLConnection
+                          conn.connectTimeout=8000;conn.readTimeout=8000;conn.connect()
+                          if(conn.responseCode==200){
+                              val n=url.substringAfterLast("/").take(80).ifEmpty{"file"}
+                              val f=File(getExternalFilesDir(null)?:filesDir,n)
+                              f.outputStream().use{conn.inputStream.copyTo(it)}
+                              withContext(Dispatchers.Main){toast("Saved: ${f.name}")}
                           }
-                      } catch (e: Exception) {
-                          withContext(Dispatchers.Main) { toast("Error: ${e.message}") }
-                      }
+                      }catch(e:Exception){withContext(Dispatchers.Main){toast("Error: ${e.message}")}}
                   }
               }
 
-              private fun dlZip(urls: List<String>) {
-                  if (urls.isEmpty()) { toast("No files"); return }
+              private fun dlZip(urls:List<String>){
+                  if(urls.isEmpty()){toast("No files");return}
                   toast("Zipping ${urls.size} files…")
-                  scope.launch(Dispatchers.IO) {
-                      try {
-                          val dir = getExternalFilesDir(null) ?: filesDir
-                          val zip = File(dir,"site_${System.currentTimeMillis()}.zip")
-                          ZipOutputStream(BufferedOutputStream(FileOutputStream(zip))).use { zos ->
-                              urls.take(60).forEach { url ->
-                                  try {
-                                      val conn = URL(url).openConnection() as HttpURLConnection
-                                      conn.connectTimeout = 5000; conn.readTimeout = 5000; conn.connect()
-                                      if (conn.responseCode == 200) {
-                                          val n = url.substringAfterLast("/").take(80).ifEmpty{"file"}
-                                          zos.putNextEntry(ZipEntry(n))
-                                          conn.inputStream.copyTo(zos); zos.closeEntry()
+                  scope.launch(Dispatchers.IO){
+                      try{
+                          val dir=getExternalFilesDir(null)?:filesDir
+                          val zip=File(dir,"site_${System.currentTimeMillis()}.zip")
+                          ZipOutputStream(BufferedOutputStream(FileOutputStream(zip))).use{zos->
+                              urls.take(60).forEach{url->
+                                  try{
+                                      val conn=URL(url).openConnection() as HttpURLConnection
+                                      conn.connectTimeout=5000;conn.readTimeout=5000;conn.connect()
+                                      if(conn.responseCode==200){
+                                          val n=url.substringAfterLast("/").take(80).ifEmpty{"file"}
+                                          zos.putNextEntry(ZipEntry(n));conn.inputStream.copyTo(zos);zos.closeEntry()
                                       }
-                                  } catch (_: Exception) {}
+                                  }catch(_:Exception){}
                               }
                           }
-                          withContext(Dispatchers.Main) { toast("ZIP: ${zip.name}") }
-                      } catch (e: Exception) {
-                          withContext(Dispatchers.Main) { toast("Zip error: ${e.message}") }
-                      }
+                          withContext(Dispatchers.Main){toast("ZIP: ${zip.name}")}
+                      }catch(e:Exception){withContext(Dispatchers.Main){toast("Zip error: ${e.message}")}}
                   }
               }
 
               // ══════════════════════════════════════════════════════════
-              //  JS
+              //  JS Bridge
               // ══════════════════════════════════════════════════════════
-              private fun jsInspect() = """
-                  (function(){
-                      try{
-                          var s=document.createElement('style');s.id='__wis';
-                          s.textContent='.wi{outline:2px solid #6C63FF!important;background:rgba(108,99,255,0.06)!important}';
-                          document.head.appendChild(s);
-                          window.__wiSel=null;
-                          function ov(e){document.querySelectorAll('.wi').forEach(function(x){x.classList.remove('wi');});e.target.classList.add('wi');}
-                          function cl(e){
-                              e.preventDefault();e.stopPropagation();
-                              window.__wiSel=e.target;
-                              var el=e.target,tag=el.tagName.toLowerCase(),id=el.id||'';
-                              var html=el.outerHTML.substring(0,2000);
-                              var cs=window.getComputedStyle(el);
-                              var pp=['display','position','width','height','color','background-color',
-                                  'font-size','font-weight','border','border-radius','margin','padding',
-                                  'opacity','z-index','overflow','transform'];
-                              var css=pp.map(function(p){return p+': '+cs.getPropertyValue(p)+';'}).join('\n');
-                              window.WebInspector.onEl(tag,id,encodeURIComponent(html),encodeURIComponent(css));
-                          }
-                          document.addEventListener('mouseover',ov,true);
-                          document.addEventListener('click',cl,true);
-                          window.__wiClean=function(){
-                              document.removeEventListener('mouseover',ov,true);
-                              document.removeEventListener('click',cl,true);
-                              document.querySelectorAll('.wi').forEach(function(x){x.classList.remove('wi');});
-                              var st=document.getElementById('__wis');if(st)st.remove();
-                          };
-                      }catch(err){}
-                  })();
+              private fun jsInsp()="""
+                  (function(){try{
+                      var s=document.createElement('style');s.id='__wis';
+                      s.textContent='.wi{outline:2px solid #6C63FF!important;background:rgba(108,99,255,0.06)!important}';
+                      document.head.appendChild(s);
+                      window.__ws=null;
+                      function ov(e){document.querySelectorAll('.wi').forEach(function(x){x.classList.remove('wi');});e.target.classList.add('wi');}
+                      function cl(e){e.preventDefault();e.stopPropagation();window.__ws=e.target;
+                          var el=e.target,tag=el.tagName.toLowerCase(),id=el.id||'';
+                          var html=el.outerHTML.substring(0,2000);
+                          var cs=window.getComputedStyle(el);
+                          var pp=['display','position','width','height','color','background-color',
+                              'font-size','font-weight','border','border-radius','margin','padding'];
+                          var css=pp.map(function(p){return p+': '+cs.getPropertyValue(p)+';'}).join('\n');
+                          window.WebInspector.onEl(tag,id,encodeURIComponent(html),encodeURIComponent(css));}
+                      document.addEventListener('mouseover',ov,true);
+                      document.addEventListener('click',cl,true);
+                      window.__wc=function(){document.removeEventListener('mouseover',ov,true);
+                          document.removeEventListener('click',cl,true);
+                          document.querySelectorAll('.wi').forEach(function(x){x.classList.remove('wi');});
+                          var st=document.getElementById('__wis');if(st)st.remove();};
+                  }catch(err){}})();
               """.trimIndent()
 
               inner class JsBridge {
                   @JavascriptInterface
-                  fun onEl(tag: String, id: String, hEnc: String, cEnc: String) {
-                      val h = try { java.net.URLDecoder.decode(hEnc,"UTF-8") } catch(e:Exception){hEnc}
-                      val c = try { java.net.URLDecoder.decode(cEnc,"UTF-8") }  catch(e:Exception){cEnc}
-                      runOnUiThread { showElement(tag,id,h,c) }
+                  fun onEl(tag:String,id:String,hEnc:String,cEnc:String){
+                      val h=try{java.net.URLDecoder.decode(hEnc,"UTF-8")}catch(e:Exception){hEnc}
+                      val c=try{java.net.URLDecoder.decode(cEnc,"UTF-8")}catch(e:Exception){cEnc}
+                      runOnUiThread{showEl(tag,id,h,c)}
                   }
               }
 
-              // ── Helpers ────────────────────────────────────────────────
-              private fun saveFile(name: String, content: String) {
-                  try {
-                      File(getExternalFilesDir(null) ?: filesDir, name).writeText(content)
-                      toast("Saved!")
-                  } catch (e: Exception) { toast("Save error: ${e.message}") }
+              private fun saveF(name:String,content:String){
+                  try{File(getExternalFilesDir(null)?:filesDir,name).writeText(content);toast("Saved!")}
+                  catch(e:Exception){toast("Save error: ${e.message}")}
               }
 
-              private fun toast(msg: String) =
-                  Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+              private fun toast(msg:String)=Toast.makeText(this,msg,Toast.LENGTH_SHORT).show()
 
               @Suppress("OVERRIDE_DEPRECATION")
-              override fun onBackPressed() {
-                  when {
-                      inspMode -> toggleInspector()
-                      webView?.canGoBack() == true -> webView?.goBack()
-                      else -> super.onBackPressed()
-                  }
+              override fun onBackPressed(){
+                  when{inspMode->toggleInsp(); webView?.canGoBack()==true->webView?.goBack()
+                      else->super.onBackPressed()}
               }
 
-              override fun onDestroy() {
-                  super.onDestroy()
-                  scope.cancel()
-                  webView?.stopLoading()
-                  webView?.destroy()
-                  webView = null
+              override fun onDestroy(){
+                  super.onDestroy(); scope.cancel()
+                  webView?.stopLoading(); webView?.destroy(); webView=null
               }
           }
           KOTLIN
@@ -1482,9 +1143,21 @@ jobs:
           echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
           echo "$HOME/android-sdk/platform-tools"           >> $GITHUB_PATH
 
-      - name: Accept licenses & install SDK
+      # ✅ Исправление: принимаем лицензии через файлы хешей
+      - name: Accept Android SDK licenses
         run: |
-          yes | sdkmanager --licenses || true
+          mkdir -p $HOME/android-sdk/licenses
+          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/android-sdk/licenses/android-sdk-license
+          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/android-sdk/licenses/android-sdk-license
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >> $HOME/android-sdk/licenses/android-sdk-license
+          echo "84831b9409646a918e30573bab4c9c91346d8abd" >> $HOME/android-sdk/licenses/android-sdk-license
+          echo "601085b94cd77f0b54ff86406957099ebe79c4d6" > $HOME/android-sdk/licenses/android-sdk-preview-license
+          echo "84831b9409646a918e30573bab4c9c91346d8abd" > $HOME/android-sdk/licenses/android-googletv-license
+          echo "33b6a2b64607f11b759f320ef9dff4ae5c47d97a" > $HOME/android-sdk/licenses/google-gdk-license
+          echo "e9acab5b5fbb560a72cfaecce8946896ff6aab9d" > $HOME/android-sdk/licenses/mips-android-sysimage-license
+
+      - name: Install SDK packages
+        run: |
           sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
       - name: local.properties
